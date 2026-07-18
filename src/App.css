@@ -252,7 +252,11 @@ button { color: inherit; }
 .file-area::-webkit-scrollbar-thumb:hover { background: #939eaa; }
 .file-header, .file-row {
   display: grid;
-  grid-template-columns: minmax(230px, 2fr) minmax(150px, .9fr) minmax(110px, .7fr) 90px;
+  grid-template-columns:
+    minmax(140px, var(--column-name, 2fr))
+    minmax(130px, var(--column-modified, .9fr))
+    minmax(90px, var(--column-type, .7fr))
+    minmax(70px, var(--column-size, 90px));
   align-items: center;
 }
 .file-header {
@@ -265,6 +269,7 @@ button { color: inherit; }
   backdrop-filter: blur(10px);
 }
 .file-header button {
+  position: relative;
   height: 100%;
   border: 0;
   border-right: 1px solid var(--line);
@@ -279,6 +284,27 @@ button { color: inherit; }
 }
 .file-header button:hover { background: #f0f2f5; }
 .file-header svg { width: 11px; }
+.column-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  z-index: 3;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  touch-action: none;
+}
+.column-resize-handle:hover::after,
+.resizing-column .column-resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 1px;
+  background: var(--blue);
+}
+.resizing-column, .resizing-column * { cursor: col-resize !important; }
 
 .file-row {
   height: 31px;
@@ -396,6 +422,4 @@ button { color: inherit; }
 @media (max-width: 930px) {
   .app-shell { grid-template-columns: 185px minmax(0, 1fr); }
   .search-box { width: 150px; }
-  .file-header, .file-row { grid-template-columns: minmax(220px, 2fr) 150px 100px; }
-  .file-size { display: none; }
 }

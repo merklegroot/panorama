@@ -55,6 +55,7 @@ function App() {
   const [search, setSearch] = useState('')
   const [view, setView] = useState<ViewMode>('list')
   const [sort, setSort] = useState<{ key: SortKey; ascending: boolean }>({ key: 'name', ascending: true })
+  const [columnWidths, setColumnWidths] = useState<Partial<Record<SortKey, number>>>({})
   const [showHidden, setShowHidden] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -245,6 +246,31 @@ function App() {
     setSort((previous) => ({ key, ascending: previous.key === key ? !previous.ascending : true }))
   }
 
+  const startColumnResize = (key: SortKey, event: React.PointerEvent<HTMLSpanElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    const header = event.currentTarget.parentElement
+    if (!header) return
+
+    const startX = event.clientX
+    const startWidth = header.getBoundingClientRect().width
+    const minimumWidths: Record<SortKey, number> = { name: 140, modified: 130, type: 90, size: 70 }
+
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      const width = Math.max(minimumWidths[key], startWidth + moveEvent.clientX - startX)
+      setColumnWidths((previous) => ({ ...previous, [key]: width }))
+    }
+    const onPointerUp = () => {
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+      document.body.classList.remove('resizing-column')
+    }
+
+    document.body.classList.add('resizing-column')
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', onPointerUp)
+  }
+
   const showContextMenu = (event: React.MouseEvent, entry?: FileEntry) => {
     event.preventDefault()
     if (entry && !selected.has(entry.path)) setSelected(new Set([entry.path]))
@@ -337,11 +363,29 @@ function App() {
           }}><MoreHorizontal /></button>
         </div>
 
-        <div className={`file-area ${view}`} onClick={(event) => { if (event.target === event.currentTarget) setSelected(new Set()) }} onContextMenu={(event) => showContextMenu(event)}>
+        <div
+          className={`file-area ${view}`}
+          style={{
+            '--column-name': columnWidths.name ? `${columnWidths.name}px` : undefined,
+            '--column-modified': columnWidths.modified ? `${columnWidths.modified}px` : undefined,
+            '--column-type': columnWidths.type ? `${columnWidths.type}px` : undefined,
+            '--column-size': columnWidths.size ? `${columnWidths.size}px` : undefined,
+          } as React.CSSProperties}
+          onClick={(event) => { if (event.target === event.currentTarget) setSelected(new Set()) }}
+          onContextMenu={(event) => showContextMenu(event)}
+        >
           {view === 'list' && (
             <div className="file-header">
               {([['name', 'Name'], ['modified', 'Date modified'], ['type', 'Type'], ['size', 'Size']] as [SortKey, string][]).map(([key, label]) => (
-                <button key={key} onClick={() => setSortKey(key)}>{label}{sort.key === key && (sort.ascending ? <ArrowUp /> : <ArrowDown />)}</button>
+                <button key={key} onClick={() => setSortKey(key)}>
+                  <span>{label}</span>
+                  {sort.key === key && (sort.ascending ? <ArrowUp /> : <ArrowDown />)}
+                  <span
+                    className="column-resize-handle"
+                    onPointerDown={(event) => startColumnResize(key, event)}
+                    onClick={(event) => event.stopPropagation()}
+                  />
+                </button>
               ))}
             </div>
           )}
