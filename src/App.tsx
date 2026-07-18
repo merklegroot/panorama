@@ -226,6 +226,11 @@ function App() {
       if (event.metaKey && event.key.toLowerCase() === 'c') void copySelected(false)
       if (event.metaKey && event.key.toLowerCase() === 'x') void copySelected(true)
       if (event.metaKey && event.key.toLowerCase() === 'v') void paste()
+      if (event.metaKey && event.key.toLowerCase() === 'l') {
+        event.preventDefault()
+        setAddressValue(currentPath)
+        setEditingAddress(true)
+      }
       if (event.metaKey && event.key.toLowerCase() === 'a') {
         event.preventDefault()
         setSelected(new Set(visibleEntries.map((entry) => entry.path)))
@@ -293,14 +298,14 @@ function App() {
               navigate(addressValue)
             }}>
               <Folder size={15} />
-              <input autoFocus value={addressValue} onChange={(event) => setAddressValue(event.target.value)} onBlur={() => setEditingAddress(false)} />
+              <input autoFocus value={addressValue} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setAddressValue(event.target.value)} onBlur={() => setEditingAddress(false)} />
             </form>
           ) : (
-            <div className="breadcrumbs" onDoubleClick={() => { setAddressValue(currentPath); setEditingAddress(true) }}>
-              <button onClick={() => navigate('/')} title="Macintosh HD"><HardDrive size={15} /></button>
+            <div className="breadcrumbs" title="Click to type a path" onClick={() => { setAddressValue(currentPath); setEditingAddress(true) }}>
+              <button onClick={(event) => { event.stopPropagation(); navigate('/') }} title="Macintosh HD"><HardDrive size={15} /></button>
               {pathParts.map((part, index) => {
                 const partPath = `/${pathParts.slice(0, index + 1).join('/')}`
-                return <span className="breadcrumb-part" key={partPath}><ChevronRight size={14} /><button onClick={() => navigate(partPath)}>{part}</button></span>
+                return <span className="breadcrumb-part" key={partPath}><ChevronRight size={14} /><button onClick={(event) => { event.stopPropagation(); navigate(partPath) }}>{part}</button></span>
               })}
             </div>
           )}
