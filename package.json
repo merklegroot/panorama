@@ -16,6 +16,7 @@
   "build": {
     "appId": "com.panorama.fileexplorer",
     "productName": "Panorama",
+    "afterPack": "scripts/after-pack.cjs",
     "directories": {
       "output": "release"
     },
