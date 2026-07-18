@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron')
+const { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } = require('electron')
 const fs = require('node:fs/promises')
 const os = require('node:os')
 const path = require('node:path')
@@ -85,6 +85,15 @@ function registerIpc() {
   ipcMain.handle('fs:open', async (_event, targetPath) => {
     const error = await shell.openPath(targetPath)
     if (error) throw new Error(error)
+  })
+
+  ipcMain.handle('fs:thumbnail', async (_event, targetPath) => {
+    try {
+      const image = await nativeImage.createThumbnailFromPath(targetPath, { width: 144, height: 144 })
+      return image.isEmpty() ? null : image.toDataURL()
+    } catch {
+      return null
+    }
   })
 
   ipcMain.handle('fs:reveal', (_event, targetPath) => shell.showItemInFolder(targetPath))

@@ -12,6 +12,7 @@ type SortKey = 'name' | 'modified' | 'type' | 'size'
 type ViewMode = 'list' | 'grid'
 
 const locationIcons = { home: Home, monitor: Monitor, file: FileText, download: Download, image: Image, music: Music, video: Video }
+const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'heic']
 
 function formatSize(bytes: number, isDirectory: boolean) {
   if (isDirectory) return '—'
@@ -33,7 +34,7 @@ function fileType(entry: FileEntry) {
 
 function FileIcon({ entry, size = 20 }: { entry: FileEntry; size?: number }) {
   if (entry.isDirectory) return <Folder className="folder-icon" size={size} fill="currentColor" />
-  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'heic'].includes(entry.extension))
+  if (imageExtensions.includes(entry.extension))
     return <FileImage className="image-icon" size={size} />
   if (['js', 'jsx', 'ts', 'tsx', 'css', 'html', 'py', 'rs', 'go', 'json'].includes(entry.extension))
     return <FileCode2 className="code-icon" size={size} />
@@ -42,6 +43,22 @@ function FileIcon({ entry, size = 20 }: { entry: FileEntry; size?: number }) {
   if (['txt', 'md', 'pdf', 'doc', 'docx', 'rtf'].includes(entry.extension))
     return <FileText className="document-icon" size={size} />
   return <File className="generic-icon" size={size} />
+}
+
+function ImagePreview({ entry }: { entry: FileEntry }) {
+  const [source, setSource] = useState<string | null>(null)
+
+  useEffect(() => {
+    let active = true
+    setSource(null)
+    window.explorer?.getThumbnail(entry.path)
+      .then((thumbnail) => { if (active) setSource(thumbnail) })
+      .catch(() => { if (active) setSource(null) })
+    return () => { active = false }
+  }, [entry.path])
+
+  if (!source) return <FileIcon entry={entry} size={48} />
+  return <img className="image-preview" src={source} alt="" draggable={false} />
 }
 
 function App() {
@@ -401,7 +418,9 @@ function App() {
               {visibleEntries.map((entry) => (
                 <div className={`file-row ${selected.has(entry.path) ? 'selected' : ''}`} key={entry.path} onClick={(event) => chooseEntry(entry, event)} onDoubleClick={() => openEntry(entry)} onContextMenu={(event) => showContextMenu(event, entry)} title={entry.path}>
                   <div className="file-name">
-                    <FileIcon entry={entry} size={view === 'grid' ? 48 : 20} />
+                    {view === 'grid' && !entry.isDirectory && imageExtensions.includes(entry.extension)
+                      ? <ImagePreview entry={entry} />
+                      : <FileIcon entry={entry} size={view === 'grid' ? 48 : 20} />}
                     {renaming === entry.path ? (
                       <input autoFocus ref={renameRef} defaultValue={entry.name} onClick={(event) => event.stopPropagation()} onBlur={(event) => void submitRename(entry, event.target.value)} onKeyDown={(event) => {
                         if (event.key === 'Enter') event.currentTarget.blur()

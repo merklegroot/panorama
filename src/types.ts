@@ -17,6 +17,7 @@ export interface Location {
 export interface ExplorerApi {
   getLocations(): Promise<Location[]>
   readDirectory(path: string, showHidden: boolean): Promise<FileEntry[]>
+  getThumbnail(path: string): Promise<string | null>
   open(path: string): Promise<void>
   reveal(path: string): Promise<void>
   chooseFolder(): Promise<string | null>

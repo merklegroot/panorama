@@ -346,7 +346,7 @@ button { color: inherit; }
 }
 .file-area.grid .file-row {
   width: auto;
-  height: 102px;
+  height: 124px;
   margin: 0;
   display: flex;
   align-items: center;
@@ -354,6 +354,15 @@ button { color: inherit; }
   padding: 9px 6px;
 }
 .file-area.grid .file-name { height: 100%; flex-direction: column; justify-content: center; gap: 8px; padding: 0; text-align: center; }
+.file-area.grid .image-preview {
+  width: 68px;
+  height: 68px;
+  flex: 0 0 auto;
+  border-radius: 5px;
+  object-fit: contain;
+  background: #f3f5f7;
+  box-shadow: 0 1px 4px rgba(24, 35, 49, .16);
+}
 .file-area.grid .file-name > span { max-width: 100%; white-space: normal; line-height: 15px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .file-area.grid .modified, .file-area.grid .file-type, .file-area.grid .file-size { display: none; }
 .file-area.grid .file-name input { width: 98px; text-align: center; }

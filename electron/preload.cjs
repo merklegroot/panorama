@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron')
 contextBridge.exposeInMainWorld('explorer', {
   getLocations: () => ipcRenderer.invoke('fs:locations'),
   readDirectory: (path, showHidden) => ipcRenderer.invoke('fs:readDirectory', path, showHidden),
+  getThumbnail: (path) => ipcRenderer.invoke('fs:thumbnail', path),
   open: (path) => ipcRenderer.invoke('fs:open', path),
   reveal: (path) => ipcRenderer.invoke('fs:reveal', path),
   chooseFolder: () => ipcRenderer.invoke('fs:chooseFolder'),
