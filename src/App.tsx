@@ -73,6 +73,7 @@ function App() {
   const [view, setView] = useState<ViewMode>('list')
   const [sort, setSort] = useState<{ key: SortKey; ascending: boolean }>({ key: 'name', ascending: true })
   const [columnWidths, setColumnWidths] = useState<Partial<Record<SortKey, number>>>({})
+  const [sidebarWidth, setSidebarWidth] = useState(220)
   const [showHidden, setShowHidden] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -288,6 +289,25 @@ function App() {
     window.addEventListener('pointerup', onPointerUp)
   }
 
+  const startSidebarResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    const startX = event.clientX
+    const startWidth = sidebarWidth
+
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      setSidebarWidth(Math.min(420, Math.max(150, startWidth + moveEvent.clientX - startX)))
+    }
+    const onPointerUp = () => {
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+      document.body.classList.remove('resizing-sidebar')
+    }
+
+    document.body.classList.add('resizing-sidebar')
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', onPointerUp)
+  }
+
   const showContextMenu = (event: React.MouseEvent, entry?: FileEntry) => {
     event.preventDefault()
     if (entry && !selected.has(entry.path)) setSelected(new Set([entry.path]))
@@ -297,7 +317,11 @@ function App() {
   const pathParts = currentPath.split('/').filter(Boolean)
 
   return (
-    <main className="app-shell" onClick={() => setContextMenu(null)}>
+    <main
+      className="app-shell"
+      style={{ '--sidebar-width': `${sidebarWidth}px` } as React.CSSProperties}
+      onClick={() => setContextMenu(null)}
+    >
       <aside className="sidebar">
         <div className="sidebar-drag-region" />
         <div className="brand"><div className="brand-mark"><FolderOpen size={17} fill="currentColor" /></div><span>Panorama</span></div>
@@ -323,6 +347,27 @@ function App() {
           </button>
         </nav>
         <div className="sidebar-footer"><Info size={14} /><span>{selected.size ? `${selected.size} selected` : `${entries.length} items`}</span></div>
+        <div
+          className="sidebar-resize-handle"
+          role="separator"
+          aria-label="Resize sidebar"
+          aria-orientation="vertical"
+          aria-valuemin={150}
+          aria-valuemax={420}
+          aria-valuenow={sidebarWidth}
+          tabIndex={0}
+          onPointerDown={startSidebarResize}
+          onKeyDown={(event) => {
+            if (event.key === 'ArrowLeft') {
+              event.preventDefault()
+              setSidebarWidth((width) => Math.max(150, width - 10))
+            }
+            if (event.key === 'ArrowRight') {
+              event.preventDefault()
+              setSidebarWidth((width) => Math.min(420, width + 10))
+            }
+          }}
+        />
       </aside>
 
       <section className="workspace">
