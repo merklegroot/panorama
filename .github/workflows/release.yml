@@ -1,0 +1,139 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version without v prefix (optional — auto-increments patch if empty)"
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prepare:
+    name: Prepare version
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          bump_patch() {
+            local ver="${1#v}"
+            local major minor patch
+            IFS='.' read -r major minor patch _ <<< "$ver"
+            major=${major:-0}
+            minor=${minor:-0}
+            patch=${patch:-0}
+            echo "${major}.${minor}.$((patch + 1))"
+          }
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ -n "${{ inputs.version }}" ]; then
+              VERSION="${{ inputs.version }}"
+            else
+              LATEST_TAG=$(git tag -l "v*" --sort=-v:refname | head -1)
+              if [ -n "$LATEST_TAG" ]; then
+                VERSION=$(bump_patch "$LATEST_TAG")
+              else
+                VERSION=$(node -p "require('./package.json').version")
+              fi
+            fi
+            TAG="v${VERSION}"
+
+            npm version "$VERSION" --no-git-tag-version --allow-same-version
+
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package.json package-lock.json
+            if ! git diff --cached --quiet; then
+              git commit -m "Release ${TAG}"
+              git push origin HEAD:master
+            fi
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+            VERSION="${TAG#v}"
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build macOS
+    needs: prepare
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'master' || github.ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Sync package version
+        run: npm version "${{ needs.prepare.outputs.version }}" --no-git-tag-version --allow-same-version
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build macOS
+        run: npm run dist:mac
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Panorama-macOS
+          path: |
+            release/*.dmg
+            release/*.zip
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: Panorama-*
+          merge-multiple: true
+          path: dist
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          name: Panorama ${{ needs.prepare.outputs.tag }}
+          generate_release_notes: true
+          body: |
+            ### macOS
+            - Download the **`.dmg`** file, open it, and drag **Panorama** into **Applications**
+            - The **`.zip`** file contains the standalone application bundle
+            - First launch: **right-click → Open → Open** (unsigned build; one-time Gatekeeper prompt)
+          files: dist/*
