@@ -3,6 +3,8 @@ const fs = require('node:fs/promises')
 const os = require('node:os')
 const path = require('node:path')
 
+app.setName('Panorama')
+
 const isDev = !app.isPackaged
 let mainWindow
 let clipboard = { paths: [], cut: false }
