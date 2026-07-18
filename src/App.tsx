@@ -302,10 +302,10 @@ function App() {
             </form>
           ) : (
             <div className="breadcrumbs" title="Click to type a path" onClick={() => { setAddressValue(currentPath); setEditingAddress(true) }}>
-              <button onClick={(event) => { event.stopPropagation(); navigate('/') }} title="Macintosh HD"><HardDrive size={15} /></button>
+              <button title="Macintosh HD"><HardDrive size={15} /></button>
               {pathParts.map((part, index) => {
                 const partPath = `/${pathParts.slice(0, index + 1).join('/')}`
-                return <span className="breadcrumb-part" key={partPath}><ChevronRight size={14} /><button onClick={(event) => { event.stopPropagation(); navigate(partPath) }}>{part}</button></span>
+                return <span className="breadcrumb-part" key={partPath}><ChevronRight size={14} /><button>{part}</button></span>
               })}
             </div>
           )}

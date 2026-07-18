@@ -153,6 +153,11 @@ button { color: inherit; }
   background: rgba(255, 255, 255, 0.86);
   box-shadow: inset 0 1px rgba(255,255,255,.6);
 }
+.breadcrumbs {
+  cursor: text;
+  -webkit-app-region: no-drag;
+}
+.breadcrumbs button { pointer-events: none; }
 .breadcrumbs > button, .breadcrumb-part button {
   height: 25px;
   border: 0;
