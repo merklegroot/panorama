@@ -9,11 +9,31 @@
     "dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && electron .\"",
     "start": "electron .",
     "build": "tsc -b && vite build",
+    "dist:mac": "npm run build && electron-builder --mac --publish never",
     "lint": "oxlint",
     "preview": "vite preview"
   },
+  "build": {
+    "appId": "com.panorama.fileexplorer",
+    "productName": "Panorama",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.utilities",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "artifactName": "Panorama-${version}-mac-${arch}.${ext}"
+  },
   "dependencies": {
-    "electron": "^43.1.1",
     "lucide-react": "^1.25.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
@@ -24,6 +44,8 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
     "concurrently": "^10.0.3",
+    "electron": "^43.1.1",
+    "electron-builder": "^26.15.3",
     "oxlint": "^1.71.0",
     "typescript": "~6.0.2",
     "vite": "^8.1.1",
