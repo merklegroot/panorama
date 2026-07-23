@@ -9,6 +9,7 @@ import '../explorer_service.dart';
 import '../folder_pane_controller.dart';
 import '../models.dart';
 import '../theme.dart';
+import 'address_path_field.dart';
 
 class FolderPaneView extends StatefulWidget {
   const FolderPaneView({
@@ -184,21 +185,14 @@ class _FolderPaneViewState extends State<FolderPaneView> {
           const SizedBox(width: 6),
           Expanded(
             child: _editingAddress
-                ? TextField(
+                ? AddressPathField(
                     controller: _addressController,
-                    autofocus: true,
-                    style: const TextStyle(fontSize: 13),
-                    decoration: InputDecoration(
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      prefixIcon: const Icon(Icons.folder_outlined, size: 15),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                    ),
-                    onSubmitted: (value) {
+                    height: 30,
+                    onSubmit: (value) {
                       setState(() => _editingAddress = false);
                       pane.navigate(value);
                     },
-                    onTapOutside: (_) => setState(() => _editingAddress = false),
+                    onCancel: () => setState(() => _editingAddress = false),
                   )
                 : GestureDetector(
                     onTap: () {

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../app_controller.dart';
 import '../folder_pane_controller.dart';
 import '../theme.dart';
+import 'address_path_field.dart';
 
 class CommandBar extends StatelessWidget {
   const CommandBar({super.key, required this.controller});
@@ -180,21 +181,14 @@ class _TitleBarState extends State<TitleBar> {
           const SizedBox(width: 8),
           Expanded(
             child: _editingAddress
-                ? TextField(
+                ? AddressPathField(
                     controller: _address,
-                    autofocus: true,
-                    style: const TextStyle(fontSize: 13),
-                    decoration: InputDecoration(
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      prefixIcon: const Icon(Icons.folder_outlined, size: 15),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                    ),
-                    onSubmitted: (value) {
+                    height: 32,
+                    onSubmit: (value) {
                       setState(() => _editingAddress = false);
                       pane.navigate(value);
                     },
-                    onTapOutside: (_) => setState(() => _editingAddress = false),
+                    onCancel: () => setState(() => _editingAddress = false),
                   )
                 : GestureDetector(
                     onTap: () {
