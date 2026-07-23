@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  ArrowDown, ArrowUp, File, FileArchive, FileCode2, FileImage, FileText,
-  Folder, FolderOpen, RefreshCw,
+  ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ChevronRight, File, FileArchive,
+  FileCode2, FileImage, FileText, Folder, FolderOpen, HardDrive, RefreshCw, Search,
 } from 'lucide-react'
 import type { FileEntry } from './types'
 import type { FolderPaneState, SortKey } from './useFolderPane'
@@ -61,6 +61,8 @@ type FolderPaneProps = {
   pane: FolderPaneState
   view: ViewMode
   active: boolean
+  showChrome?: boolean
+  editAddressRequest?: number
   renaming: string | null
   onActivate: () => void
   onOpenEntry: (entry: FileEntry) => void
@@ -73,6 +75,8 @@ export function FolderPane({
   pane,
   view,
   active,
+  showChrome = false,
+  editAddressRequest = 0,
   renaming,
   onActivate,
   onOpenEntry,
@@ -81,6 +85,8 @@ export function FolderPane({
   onContextMenu,
 }: FolderPaneProps) {
   const renameRef = useRef<HTMLInputElement>(null)
+  const [editingAddress, setEditingAddress] = useState(false)
+  const [addressValue, setAddressValue] = useState('')
 
   useEffect(() => {
     if (renaming && pane.selected.has(renaming)) {
@@ -88,6 +94,14 @@ export function FolderPane({
       renameRef.current?.select()
     }
   }, [renaming, pane.selected])
+
+  useEffect(() => {
+    if (!showChrome || !active || editAddressRequest <= 0) return
+    setAddressValue(pane.path)
+    setEditingAddress(true)
+  }, [editAddressRequest, showChrome, active, pane.path])
+
+  const pathParts = pane.path.split('/').filter(Boolean)
 
   const startColumnResize = (key: SortKey, event: React.PointerEvent<HTMLSpanElement>) => {
     event.preventDefault()
@@ -116,10 +130,64 @@ export function FolderPane({
 
   return (
     <div
-      className={`folder-pane${active ? ' active' : ''}`}
+      className={`folder-pane${active ? ' active' : ''}${showChrome ? ' with-chrome' : ''}`}
       onMouseDown={onActivate}
       onFocusCapture={onActivate}
     >
+      {showChrome && (
+        <div className="pane-chrome">
+          <div className="nav-controls">
+            <button title="Back" disabled={pane.historyIndex <= 0} onClick={pane.goBack}><ArrowLeft /></button>
+            <button title="Forward" disabled={pane.historyIndex >= pane.history.length - 1} onClick={pane.goForward}><ArrowRight /></button>
+            <button title="Up one level" disabled={pane.path === '/'} onClick={pane.goUp}><ArrowUp /></button>
+            <button title="Refresh" onClick={pane.refresh}><RefreshCw className={pane.loading ? 'spinning' : ''} /></button>
+          </div>
+
+          {editingAddress ? (
+            <form className="address-input-wrap" onSubmit={(event) => {
+              event.preventDefault()
+              setEditingAddress(false)
+              pane.navigate(addressValue)
+            }}>
+              <Folder size={15} />
+              <input
+                autoFocus
+                value={addressValue}
+                onFocus={(event) => event.currentTarget.select()}
+                onChange={(event) => setAddressValue(event.target.value)}
+                onBlur={() => setEditingAddress(false)}
+              />
+            </form>
+          ) : (
+            <div
+              className="breadcrumbs"
+              title="Click to type a path"
+              onClick={() => {
+                setAddressValue(pane.path)
+                setEditingAddress(true)
+              }}
+            >
+              <button title="Macintosh HD"><HardDrive size={15} /></button>
+              {pathParts.map((part, index) => {
+                const partPath = `/${pathParts.slice(0, index + 1).join('/')}`
+                return (
+                  <span className="breadcrumb-part" key={partPath}>
+                    <ChevronRight size={14} />
+                    <button>{part}</button>
+                  </span>
+                )
+              })}
+            </div>
+          )}
+
+          <label className="search-box pane-search">
+            <Search size={15} />
+            <input value={pane.search} onChange={(event) => pane.setSearch(event.target.value)} placeholder="Search" />
+            {pane.search && <button type="button" onClick={() => pane.setSearch('')}>×</button>}
+          </label>
+        </div>
+      )}
+
       <div
         className={`file-area ${view}`}
         style={{

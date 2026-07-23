@@ -142,6 +142,9 @@ button { color: inherit; }
   overflow: hidden;
   background: rgba(255, 255, 255, 0.9);
 }
+.workspace.dual-pane {
+  grid-template-rows: 38px 46px minmax(0, 1fr) 28px;
+}
 
 .panes {
   min-width: 0;
@@ -173,6 +176,27 @@ button { color: inherit; }
   flex: 1;
 }
 
+.pane-chrome {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  background: #f7f8fa;
+}
+.pane-chrome .breadcrumbs,
+.pane-chrome .address-input-wrap {
+  min-width: 0;
+}
+.pane-chrome .pane-search {
+  width: 120px;
+  flex: 0 0 auto;
+}
+.folder-pane.active .pane-chrome {
+  background: #eef4fc;
+}
+
 .titlebar {
   min-width: 0;
   display: flex;
@@ -182,6 +206,10 @@ button { color: inherit; }
   background: rgba(249, 250, 252, 0.84);
   border-bottom: 1px solid var(--line);
   -webkit-app-region: drag;
+}
+.titlebar-drag {
+  align-items: stretch;
+  padding: 0;
 }
 .titlebar button, .titlebar input { -webkit-app-region: no-drag; }
 

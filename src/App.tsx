@@ -24,6 +24,7 @@ function App() {
   const [showHidden, setShowHidden] = useState(false)
   const [editingAddress, setEditingAddress] = useState(false)
   const [addressValue, setAddressValue] = useState('')
+  const [editAddressRequest, setEditAddressRequest] = useState(0)
   const [renaming, setRenaming] = useState<string | null>(null)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; entry?: FileEntry; paneId: PaneId } | null>(null)
   const [notesOpen, setNotesOpen] = useState(false)
@@ -190,8 +191,11 @@ function App() {
       if (event.metaKey && event.key.toLowerCase() === 'v') void paste()
       if (event.metaKey && event.key.toLowerCase() === 'l') {
         event.preventDefault()
-        setAddressValue(pane.path)
-        setEditingAddress(true)
+        if (dualPane) setEditAddressRequest((value) => value + 1)
+        else {
+          setAddressValue(pane.path)
+          setEditingAddress(true)
+        }
       }
       if (event.metaKey && event.key.toLowerCase() === 'a') {
         event.preventDefault()
@@ -299,40 +303,44 @@ function App() {
         />
       </aside>
 
-      <section className="workspace">
-        <header className="titlebar">
-          <div className="nav-controls">
-            <button title="Back" disabled={pane.historyIndex <= 0} onClick={pane.goBack}><ArrowLeft /></button>
-            <button title="Forward" disabled={pane.historyIndex >= pane.history.length - 1} onClick={pane.goForward}><ArrowRight /></button>
-            <button title="Up one level" disabled={pane.path === '/'} onClick={pane.goUp}><ArrowUp /></button>
-            <button title="Refresh" onClick={refreshActive}><RefreshCw className={pane.loading ? 'spinning' : ''} /></button>
-          </div>
-
-          {editingAddress ? (
-            <form className="address-input-wrap" onSubmit={(event) => {
-              event.preventDefault()
-              setEditingAddress(false)
-              pane.navigate(addressValue)
-            }}>
-              <Folder size={15} />
-              <input autoFocus value={addressValue} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setAddressValue(event.target.value)} onBlur={() => setEditingAddress(false)} />
-            </form>
-          ) : (
-            <div className="breadcrumbs" title="Click to type a path" onClick={() => { setAddressValue(pane.path); setEditingAddress(true) }}>
-              <button title="Macintosh HD"><HardDrive size={15} /></button>
-              {pathParts.map((part, index) => {
-                const partPath = `/${pathParts.slice(0, index + 1).join('/')}`
-                return <span className="breadcrumb-part" key={partPath}><ChevronRight size={14} /><button>{part}</button></span>
-              })}
+      <section className={`workspace${dualPane ? ' dual-pane' : ''}`}>
+        {dualPane ? (
+          <div className="titlebar titlebar-drag" />
+        ) : (
+          <header className="titlebar">
+            <div className="nav-controls">
+              <button title="Back" disabled={pane.historyIndex <= 0} onClick={pane.goBack}><ArrowLeft /></button>
+              <button title="Forward" disabled={pane.historyIndex >= pane.history.length - 1} onClick={pane.goForward}><ArrowRight /></button>
+              <button title="Up one level" disabled={pane.path === '/'} onClick={pane.goUp}><ArrowUp /></button>
+              <button title="Refresh" onClick={refreshActive}><RefreshCw className={pane.loading ? 'spinning' : ''} /></button>
             </div>
-          )}
 
-          <label className="search-box">
-            <Search size={15} />
-            <input value={pane.search} onChange={(event) => pane.setSearch(event.target.value)} placeholder="Search this folder" />
-            {pane.search && <button onClick={() => pane.setSearch('')}>×</button>}
-          </label>
-        </header>
+            {editingAddress ? (
+              <form className="address-input-wrap" onSubmit={(event) => {
+                event.preventDefault()
+                setEditingAddress(false)
+                pane.navigate(addressValue)
+              }}>
+                <Folder size={15} />
+                <input autoFocus value={addressValue} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setAddressValue(event.target.value)} onBlur={() => setEditingAddress(false)} />
+              </form>
+            ) : (
+              <div className="breadcrumbs" title="Click to type a path" onClick={() => { setAddressValue(pane.path); setEditingAddress(true) }}>
+                <button title="Macintosh HD"><HardDrive size={15} /></button>
+                {pathParts.map((part, index) => {
+                  const partPath = `/${pathParts.slice(0, index + 1).join('/')}`
+                  return <span className="breadcrumb-part" key={partPath}><ChevronRight size={14} /><button>{part}</button></span>
+                })}
+              </div>
+            )}
+
+            <label className="search-box">
+              <Search size={15} />
+              <input value={pane.search} onChange={(event) => pane.setSearch(event.target.value)} placeholder="Search this folder" />
+              {pane.search && <button onClick={() => pane.setSearch('')}>×</button>}
+            </label>
+          </header>
+        )}
 
         <div className="commandbar">
           <button className="primary-action" onClick={() => void createFolder()}><Plus size={16} /><span>New folder</span></button>
@@ -365,6 +373,8 @@ function App() {
             pane={left}
             view={view}
             active={activePane === 'left'}
+            showChrome={dualPane}
+            editAddressRequest={editAddressRequest}
             renaming={renaming}
             onActivate={() => setActivePane('left')}
             onOpenEntry={(entry) => openEntryIn(left, entry)}
@@ -377,6 +387,8 @@ function App() {
               pane={right}
               view={view}
               active={activePane === 'right'}
+              showChrome
+              editAddressRequest={editAddressRequest}
               renaming={renaming}
               onActivate={() => setActivePane('right')}
               onOpenEntry={(entry) => openEntryIn(right, entry)}
