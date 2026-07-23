@@ -4,17 +4,14 @@ A respectable file explorer — Windows Explorer–inspired browsing for the des
 
 ![Screenshot](img/screenshot.png)
 
-## Flutter desktop (current)
-
-The app lives in [`flutter_app/`](flutter_app/) and targets **macOS**, **Windows**, and **Linux**.
+## Run
 
 ```bash
-cd flutter_app
-flutter pub get
-flutter run -d macos
+npm run dev
+# or: cd flutter_app && flutter run -d macos
 ```
 
-Release build:
+## Build
 
 ```bash
 cd flutter_app
@@ -22,19 +19,20 @@ flutter build macos
 # → flutter_app/build/macos/Build/Products/Release/Panorama.app
 ```
 
-Notes are still stored at `notes/improvements.json` in the repo root (same path the Cursor improvement-notes skill expects).
+## Spotlight launcher
 
-Spotlight launcher (`npm run install:mac`) opens the Flutter build at `flutter_app/build/macos/Build/Products/Release/Panorama.app` (falls back to Debug). Re-run install after changing the launcher script.
+Install a `/Applications/Panorama.app` stub that opens the local Flutter build (so notes stay in this repo for Cursor):
 
-### Feature parity
+```bash
+./scripts/install-mac.sh
+```
+
+Notes are stored at `notes/improvements.json` (same path the Cursor improvement-notes skill expects).
+
+## Features
 
 - Dual-pane browsing, list/grid views, Quick Access locations
 - Cut / copy / paste, rename, new folder, trash
 - Open, Open with… (macOS), Show in Finder
 - Drag-and-drop import from Finder
 - Notes panel backed by `notes/improvements.json`
-- Hidden title bar via `window_manager`
-
-## Electron (legacy)
-
-The original Electron + React app remains at the repo root (`npm run dev`). Prefer the Flutter app for ongoing work.

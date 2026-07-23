@@ -18,31 +18,40 @@ jobs:
   build:
     name: Build macOS
     runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: flutter_app
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
         with:
-          node-version: 24
-          cache: npm
+          channel: stable
+          cache: true
 
       - name: Install dependencies
-        run: npm ci
+        run: flutter pub get
 
-      - name: Lint
-        run: npm run lint
+      - name: Analyze
+        run: flutter analyze
 
-      - name: Build and package macOS
-        run: npm run dist:mac
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - name: Test
+        run: flutter test
+
+      - name: Build macOS
+        run: flutter build macos --release
+
+      - name: Package zip
+        run: |
+          mkdir -p ../release
+          ditto -c -k --sequesterRsrc --keepParent \
+            build/macos/Build/Products/Release/Panorama.app \
+            ../release/Panorama-macOS.zip
 
       - name: Upload macOS build
         uses: actions/upload-artifact@v4
         with:
           name: Panorama-macOS
-          path: |
-            release/*.dmg
-            release/*.zip
+          path: release/Panorama-macOS.zip
           if-no-files-found: error

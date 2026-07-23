@@ -1,60 +1,14 @@
 {
-  "name": "panorama-file-explorer",
+  "name": "panorama",
   "private": true,
   "version": "1.0.4",
-  "description": "A Windows Explorer-inspired file manager for macOS",
-  "main": "electron/main.cjs",
-  "type": "module",
+  "description": "A Windows Explorer-inspired file manager for desktop",
   "scripts": {
     "dev": "cd flutter_app && flutter run -d macos",
-    "dev:electron": "concurrently -k \"vite\" \"wait-on tcp:5173 && electron .\"",
     "start": "cd flutter_app && flutter run -d macos",
-    "start:electron": "electron .",
     "build": "cd flutter_app && flutter build macos",
-    "build:electron": "tsc -b && vite build",
-    "dist:mac": "npm run build:electron && electron-builder --mac --publish never",
-    "install:mac": "node scripts/install-mac.cjs",
-    "lint": "oxlint",
-    "preview": "vite preview"
-  },
-  "build": {
-    "appId": "com.panorama.fileexplorer",
-    "productName": "Panorama",
-    "afterPack": "scripts/after-pack.cjs",
-    "directories": {
-      "output": "release"
-    },
-    "files": [
-      "dist/**/*",
-      "electron/**/*",
-      "package.json"
-    ],
-    "mac": {
-      "icon": "build/icon.png",
-      "category": "public.app-category.utilities",
-      "target": [
-        "dmg",
-        "zip"
-      ]
-    },
-    "artifactName": "Panorama-${version}-mac-${arch}.${ext}"
-  },
-  "dependencies": {
-    "lucide-react": "^1.25.0",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7"
-  },
-  "devDependencies": {
-    "@types/node": "^24.13.2",
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.3",
-    "concurrently": "^10.0.3",
-    "electron": "^43.1.1",
-    "electron-builder": "^26.15.3",
-    "oxlint": "^1.71.0",
-    "typescript": "~6.0.2",
-    "vite": "^8.1.1",
-    "wait-on": "^9.0.10"
+    "test": "cd flutter_app && flutter test",
+    "analyze": "cd flutter_app && flutter analyze",
+    "install:mac": "./scripts/install-mac.sh"
   }
 }

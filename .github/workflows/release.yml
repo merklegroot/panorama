@@ -29,11 +29,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-
       - name: Resolve version
         id: version
         shell: bash
@@ -48,6 +43,16 @@ jobs:
             echo "${major}.${minor}.$((patch + 1))"
           }
 
+          current_from_pubspec() {
+            sed -nE 's/^version:[[:space:]]*([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' flutter_app/pubspec.yaml | head -1
+          }
+
+          set_pubspec_version() {
+            local ver="$1"
+            sed -i.bak -E "s/^version:[[:space:]]*[0-9]+\.[0-9]+\.[0-9]+(\+[0-9]+)?/version: ${ver}+1/" flutter_app/pubspec.yaml
+            rm -f flutter_app/pubspec.yaml.bak
+          }
+
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             if [ -n "${{ inputs.version }}" ]; then
               VERSION="${{ inputs.version }}"
@@ -56,16 +61,16 @@ jobs:
               if [ -n "$LATEST_TAG" ]; then
                 VERSION=$(bump_patch "$LATEST_TAG")
               else
-                VERSION=$(node -p "require('./package.json').version")
+                VERSION=$(current_from_pubspec)
               fi
             fi
             TAG="v${VERSION}"
 
-            npm version "$VERSION" --no-git-tag-version --allow-same-version
+            set_pubspec_version "$VERSION"
 
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add package.json package-lock.json
+            git add flutter_app/pubspec.yaml
             if ! git diff --cached --quiet; then
               git commit -m "Release ${TAG}"
               git push origin HEAD:master
@@ -82,35 +87,43 @@ jobs:
     name: Build macOS
     needs: prepare
     runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: flutter_app
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && 'master' || github.ref }}
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
         with:
-          node-version: 24
-          cache: npm
+          channel: stable
+          cache: true
 
-      - name: Sync package version
-        run: npm version "${{ needs.prepare.outputs.version }}" --no-git-tag-version --allow-same-version
+      - name: Sync pubspec version
+        run: |
+          sed -i.bak -E "s/^version:[[:space:]]*[0-9]+\.[0-9]+\.[0-9]+(\+[0-9]+)?/version: ${{ needs.prepare.outputs.version }}+1/" pubspec.yaml
+          rm -f pubspec.yaml.bak
 
       - name: Install dependencies
-        run: npm ci
+        run: flutter pub get
 
       - name: Build macOS
-        run: npm run dist:mac
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: flutter build macos --release
+
+      - name: Package zip
+        run: |
+          mkdir -p ../release
+          ditto -c -k --sequesterRsrc --keepParent \
+            build/macos/Build/Products/Release/Panorama.app \
+            ../release/Panorama-${{ needs.prepare.outputs.version }}-macOS.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: Panorama-macOS
-          path: |
-            release/*.dmg
-            release/*.zip
+          path: release/Panorama-*.zip
           if-no-files-found: error
 
   release:
@@ -133,7 +146,7 @@ jobs:
           generate_release_notes: true
           body: |
             ### macOS
-            - Download the **`.dmg`** file, open it, and drag **Panorama** into **Applications**
-            - The **`.zip`** file contains the standalone application bundle
+            - Download the **`.zip`**, unzip it, and drag **Panorama.app** into **Applications**
             - First launch: **right-click → Open → Open** (unsigned build; one-time Gatekeeper prompt)
+            - Or use the repo launcher: `./scripts/install-mac.sh` after building locally
           files: dist/*

@@ -377,8 +377,9 @@ function run(argv) {
         final packageJson = File(p.join(dir.path, 'package.json'));
         final flutterApp = Directory(p.join(dir.path, 'flutter_app'));
         final notesDir = Directory(p.join(dir.path, 'notes'));
+        final readme = File(p.join(dir.path, 'README.md'));
         if (packageJson.existsSync() ||
-            (flutterApp.existsSync() && notesDir.existsSync()) ||
+            (flutterApp.existsSync() && (notesDir.existsSync() || readme.existsSync())) ||
             File(p.join(dir.path, 'notes', 'improvements.json')).existsSync()) {
           return dir;
         }
