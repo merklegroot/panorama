@@ -4,8 +4,27 @@ const os = require('node:os')
 const path = require('node:path')
 
 const repoRoot = path.join(__dirname, '..')
-const arch = process.arch === 'arm64' ? 'arm64' : 'x64'
-const builtApp = path.join(repoRoot, 'release', `mac-${arch}`, 'Panorama.app')
+const flutterReleaseApp = path.join(
+  repoRoot,
+  'flutter_app',
+  'build',
+  'macos',
+  'Build',
+  'Products',
+  'Release',
+  'Panorama.app',
+)
+const flutterDebugApp = path.join(
+  repoRoot,
+  'flutter_app',
+  'build',
+  'macos',
+  'Build',
+  'Products',
+  'Debug',
+  'Panorama.app',
+)
+const builtApp = fs.existsSync(flutterReleaseApp) ? flutterReleaseApp : flutterDebugApp
 const launcherApp = '/Applications/Panorama.app'
 const staging = path.join(repoRoot, 'release', 'Panorama-launcher.app')
 const iconSource = path.join(repoRoot, 'build', 'icon.png')
@@ -50,27 +69,27 @@ const launcherScript = `#!/bin/bash
 set -euo pipefail
 
 REPO=${JSON.stringify(repoRoot)}
-ARCH="$(uname -m)"
-case "$ARCH" in
-  arm64) BUILD_ARCH="arm64" ;;
-  x86_64) BUILD_ARCH="x64" ;;
-  *) BUILD_ARCH="$ARCH" ;;
-esac
+RELEASE_APP="$REPO/flutter_app/build/macos/Build/Products/Release/Panorama.app"
+DEBUG_APP="$REPO/flutter_app/build/macos/Build/Products/Debug/Panorama.app"
 
-APP="$REPO/release/mac-$BUILD_ARCH/Panorama.app"
-
-if [[ ! -d "$APP" ]]; then
+if [[ -d "$RELEASE_APP" ]]; then
+  APP="$RELEASE_APP"
+elif [[ -d "$DEBUG_APP" ]]; then
+  APP="$DEBUG_APP"
+else
   osascript <<EOF
-display dialog "No Panorama build found at:
+display dialog "No Panorama Flutter build found.
 
-$APP
+Expected:
+$RELEASE_APP
 
-Run: npm run dist:mac" buttons {"OK"} default button 1 with title "Panorama" with icon caution
+Run: npm run build" buttons {"OK"} default button 1 with title "Panorama" with icon caution
 EOF
   exit 1
 fi
 
-exec open "$APP"
+# Launch the binary directly — Flutter debug bundles can fail with \`open\`.
+exec "$APP/Contents/MacOS/Panorama"
 `
 
 const infoPlist = `<?xml version="1.0" encoding="UTF-8"?>
@@ -132,5 +151,5 @@ console.log(`Installed Spotlight launcher → ${launcherApp}`)
 console.log(`It opens: ${builtApp}`)
 console.log(fs.existsSync(builtApp)
   ? 'Build is present — Cmd+Space “Panorama” will launch it.'
-  : 'No build yet — run npm run dist:mac, then use Spotlight.')
-console.log(`Host: ${os.hostname()} (${arch})`)
+  : 'No build yet — run npm run build, then use Spotlight.')
+console.log(`Host: ${os.hostname()} (${process.arch === 'arm64' ? 'arm64' : 'x64'})`)

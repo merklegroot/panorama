@@ -6,10 +6,13 @@
   "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && electron .\"",
-    "start": "electron .",
-    "build": "tsc -b && vite build",
-    "dist:mac": "npm run build && electron-builder --mac --publish never",
+    "dev": "cd flutter_app && flutter run -d macos",
+    "dev:electron": "concurrently -k \"vite\" \"wait-on tcp:5173 && electron .\"",
+    "start": "cd flutter_app && flutter run -d macos",
+    "start:electron": "electron .",
+    "build": "cd flutter_app && flutter build macos",
+    "build:electron": "tsc -b && vite build",
+    "dist:mac": "npm run build:electron && electron-builder --mac --publish never",
     "install:mac": "node scripts/install-mac.cjs",
     "lint": "oxlint",
     "preview": "vite preview"
