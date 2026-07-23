@@ -1,0 +1,211 @@
+import { useEffect, useRef, useState } from 'react'
+import {
+  ArrowDown, ArrowUp, File, FileArchive, FileCode2, FileImage, FileText,
+  Folder, FolderOpen, RefreshCw,
+} from 'lucide-react'
+import type { FileEntry } from './types'
+import type { FolderPaneState, SortKey } from './useFolderPane'
+
+export type ViewMode = 'list' | 'grid'
+
+const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'heic']
+
+function formatSize(bytes: number, isDirectory: boolean) {
+  if (isDirectory) return '—'
+  if (bytes < 1024) return `${bytes} B`
+  const units = ['KB', 'MB', 'GB', 'TB']
+  let size = bytes / 1024
+  let unit = 0
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024
+    unit += 1
+  }
+  return `${size < 10 ? size.toFixed(1) : Math.round(size)} ${units[unit]}`
+}
+
+function fileType(entry: FileEntry) {
+  if (entry.isDirectory) return 'Folder'
+  return entry.extension ? `${entry.extension.toUpperCase()} file` : 'File'
+}
+
+function FileIcon({ entry, size = 20 }: { entry: FileEntry; size?: number }) {
+  if (entry.isDirectory) return <Folder className="folder-icon" size={size} fill="currentColor" />
+  if (imageExtensions.includes(entry.extension))
+    return <FileImage className="image-icon" size={size} />
+  if (['js', 'jsx', 'ts', 'tsx', 'css', 'html', 'py', 'rs', 'go', 'json'].includes(entry.extension))
+    return <FileCode2 className="code-icon" size={size} />
+  if (['zip', 'rar', '7z', 'tar', 'gz', 'dmg'].includes(entry.extension))
+    return <FileArchive className="archive-icon" size={size} />
+  if (['txt', 'md', 'pdf', 'doc', 'docx', 'rtf'].includes(entry.extension))
+    return <FileText className="document-icon" size={size} />
+  return <File className="generic-icon" size={size} />
+}
+
+function ImagePreview({ entry }: { entry: FileEntry }) {
+  const [source, setSource] = useState<string | null>(null)
+
+  useEffect(() => {
+    let active = true
+    setSource(null)
+    window.explorer?.getThumbnail(entry.path)
+      .then((thumbnail) => { if (active) setSource(thumbnail) })
+      .catch(() => { if (active) setSource(null) })
+    return () => { active = false }
+  }, [entry.path])
+
+  if (!source) return <FileIcon entry={entry} size={48} />
+  return <img className="image-preview" src={source} alt="" draggable={false} />
+}
+
+type FolderPaneProps = {
+  pane: FolderPaneState
+  view: ViewMode
+  active: boolean
+  renaming: string | null
+  onActivate: () => void
+  onOpenEntry: (entry: FileEntry) => void
+  onRenameSubmit: (entry: FileEntry, newName: string) => void
+  onCancelRename: () => void
+  onContextMenu: (event: React.MouseEvent, entry?: FileEntry) => void
+}
+
+export function FolderPane({
+  pane,
+  view,
+  active,
+  renaming,
+  onActivate,
+  onOpenEntry,
+  onRenameSubmit,
+  onCancelRename,
+  onContextMenu,
+}: FolderPaneProps) {
+  const renameRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (renaming && pane.selected.has(renaming)) {
+      renameRef.current?.focus()
+      renameRef.current?.select()
+    }
+  }, [renaming, pane.selected])
+
+  const startColumnResize = (key: SortKey, event: React.PointerEvent<HTMLSpanElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    const header = event.currentTarget.parentElement
+    if (!header) return
+
+    const startX = event.clientX
+    const startWidth = header.getBoundingClientRect().width
+    const minimumWidths: Record<SortKey, number> = { name: 140, modified: 130, type: 90, size: 70 }
+
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      const width = Math.max(minimumWidths[key], startWidth + moveEvent.clientX - startX)
+      pane.setColumnWidths((previous) => ({ ...previous, [key]: width }))
+    }
+    const onPointerUp = () => {
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+      document.body.classList.remove('resizing-column')
+    }
+
+    document.body.classList.add('resizing-column')
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', onPointerUp)
+  }
+
+  return (
+    <div
+      className={`folder-pane${active ? ' active' : ''}`}
+      onMouseDown={onActivate}
+      onFocusCapture={onActivate}
+    >
+      <div
+        className={`file-area ${view}`}
+        style={{
+          '--column-name': pane.columnWidths.name ? `${pane.columnWidths.name}px` : undefined,
+          '--column-modified': pane.columnWidths.modified ? `${pane.columnWidths.modified}px` : undefined,
+          '--column-type': pane.columnWidths.type ? `${pane.columnWidths.type}px` : undefined,
+          '--column-size': pane.columnWidths.size ? `${pane.columnWidths.size}px` : undefined,
+        } as React.CSSProperties}
+        onClick={(event) => {
+          onActivate()
+          if (event.target === event.currentTarget) pane.setSelected(new Set())
+        }}
+        onContextMenu={(event) => {
+          onActivate()
+          onContextMenu(event)
+        }}
+      >
+        {view === 'list' && (
+          <div className="file-header">
+            {([['name', 'Name'], ['modified', 'Date modified'], ['type', 'Type'], ['size', 'Size']] as [SortKey, string][]).map(([key, label]) => (
+              <button key={key} onClick={() => pane.setSortKey(key)}>
+                <span>{label}</span>
+                {pane.sort.key === key && (pane.sort.ascending ? <ArrowUp /> : <ArrowDown />)}
+                <span
+                  className="column-resize-handle"
+                  onPointerDown={(event) => startColumnResize(key, event)}
+                  onClick={(event) => event.stopPropagation()}
+                />
+              </button>
+            ))}
+          </div>
+        )}
+
+        {pane.loading && !pane.entries.length ? (
+          <div className="empty-state"><RefreshCw className="spinning" /><p>Loading folder…</p></div>
+        ) : pane.error ? (
+          <div className="empty-state error-state"><FolderOpen /><h2>Can’t open this location</h2><p>{pane.error}</p></div>
+        ) : pane.visibleEntries.length === 0 ? (
+          <div className="empty-state">
+            <FolderOpen />
+            <h2>{pane.search ? 'No matching files' : 'This folder is empty'}</h2>
+            <p>{pane.search ? `Nothing here matches “${pane.search}”.` : 'Files you add will appear here.'}</p>
+          </div>
+        ) : (
+          <div className="file-list">
+            {pane.visibleEntries.map((entry) => (
+              <div
+                className={`file-row ${pane.selected.has(entry.path) ? 'selected' : ''}`}
+                key={entry.path}
+                onClick={(event) => {
+                  onActivate()
+                  pane.chooseEntry(entry, event)
+                }}
+                onDoubleClick={() => onOpenEntry(entry)}
+                onContextMenu={(event) => {
+                  onActivate()
+                  onContextMenu(event, entry)
+                }}
+                title={entry.path}
+              >
+                <div className="file-name">
+                  {view === 'grid' && !entry.isDirectory && imageExtensions.includes(entry.extension)
+                    ? <ImagePreview entry={entry} />
+                    : <FileIcon entry={entry} size={view === 'grid' ? 48 : 20} />}
+                  {renaming === entry.path ? (
+                    <input
+                      autoFocus
+                      ref={renameRef}
+                      defaultValue={entry.name}
+                      onClick={(event) => event.stopPropagation()}
+                      onBlur={(event) => void onRenameSubmit(entry, event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') event.currentTarget.blur()
+                        if (event.key === 'Escape') onCancelRename()
+                      }}
+                    />
+                  ) : <span>{entry.name}</span>}
+                </div>
+                <span className="modified">{new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(entry.modified))}</span>
+                <span className="file-type">{fileType(entry)}</span>
+                <span className="file-size">{formatSize(entry.size, entry.isDirectory)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

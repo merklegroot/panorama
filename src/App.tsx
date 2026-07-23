@@ -1,210 +1,86 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Clipboard, Copy, Download, Eye,
-  File, FileArchive, FileCode2, FileImage, FileText, Folder, FolderOpen,
-  Grid2X2, HardDrive, Home, Image, Info, List, Monitor, MoreHorizontal, Music,
-  Pencil, Plus, RefreshCw, Scissors, Search, StickyNote, Trash2, Video, ChevronRight,
+  ArrowLeft, ArrowRight, ArrowUp, Clipboard, Columns2, Copy, Download, Eye,
+  FileText, Folder, FolderOpen, Grid2X2, HardDrive, Home, Image, Info, List,
+  Monitor, MoreHorizontal, Music, Pencil, Plus, RefreshCw, Scissors, Search,
+  StickyNote, Trash2, Video, ChevronRight,
 } from 'lucide-react'
 import './App.css'
+import { FolderPane, type ViewMode } from './FolderPane'
 import type { FileEntry, ImprovementNote, Location } from './types'
+import { useFolderPane } from './useFolderPane'
 
-type SortKey = 'name' | 'modified' | 'type' | 'size'
-type ViewMode = 'list' | 'grid'
+type PaneId = 'left' | 'right'
 
 const locationIcons = { home: Home, monitor: Monitor, file: FileText, download: Download, image: Image, music: Music, video: Video }
-const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'heic']
-
-function formatSize(bytes: number, isDirectory: boolean) {
-  if (isDirectory) return '—'
-  if (bytes < 1024) return `${bytes} B`
-  const units = ['KB', 'MB', 'GB', 'TB']
-  let size = bytes / 1024
-  let unit = 0
-  while (size >= 1024 && unit < units.length - 1) {
-    size /= 1024
-    unit += 1
-  }
-  return `${size < 10 ? size.toFixed(1) : Math.round(size)} ${units[unit]}`
-}
-
-function fileType(entry: FileEntry) {
-  if (entry.isDirectory) return 'Folder'
-  return entry.extension ? `${entry.extension.toUpperCase()} file` : 'File'
-}
-
-function FileIcon({ entry, size = 20 }: { entry: FileEntry; size?: number }) {
-  if (entry.isDirectory) return <Folder className="folder-icon" size={size} fill="currentColor" />
-  if (imageExtensions.includes(entry.extension))
-    return <FileImage className="image-icon" size={size} />
-  if (['js', 'jsx', 'ts', 'tsx', 'css', 'html', 'py', 'rs', 'go', 'json'].includes(entry.extension))
-    return <FileCode2 className="code-icon" size={size} />
-  if (['zip', 'rar', '7z', 'tar', 'gz', 'dmg'].includes(entry.extension))
-    return <FileArchive className="archive-icon" size={size} />
-  if (['txt', 'md', 'pdf', 'doc', 'docx', 'rtf'].includes(entry.extension))
-    return <FileText className="document-icon" size={size} />
-  return <File className="generic-icon" size={size} />
-}
-
-function ImagePreview({ entry }: { entry: FileEntry }) {
-  const [source, setSource] = useState<string | null>(null)
-
-  useEffect(() => {
-    let active = true
-    setSource(null)
-    window.explorer?.getThumbnail(entry.path)
-      .then((thumbnail) => { if (active) setSource(thumbnail) })
-      .catch(() => { if (active) setSource(null) })
-    return () => { active = false }
-  }, [entry.path])
-
-  if (!source) return <FileIcon entry={entry} size={48} />
-  return <img className="image-preview" src={source} alt="" draggable={false} />
-}
 
 function App() {
   const api = window.explorer
   const [locations, setLocations] = useState<Location[]>([])
-  const [currentPath, setCurrentPath] = useState('')
-  const [entries, setEntries] = useState<FileEntry[]>([])
-  const [history, setHistory] = useState<string[]>([])
-  const [historyIndex, setHistoryIndex] = useState(-1)
-  const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [search, setSearch] = useState('')
+  const [dualPane, setDualPane] = useState(false)
+  const [activePane, setActivePane] = useState<PaneId>('left')
   const [view, setView] = useState<ViewMode>('list')
-  const [sort, setSort] = useState<{ key: SortKey; ascending: boolean }>({ key: 'name', ascending: true })
-  const [columnWidths, setColumnWidths] = useState<Partial<Record<SortKey, number>>>({})
   const [sidebarWidth, setSidebarWidth] = useState(220)
   const [showHidden, setShowHidden] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [refreshToken, setRefreshToken] = useState(0)
   const [editingAddress, setEditingAddress] = useState(false)
   const [addressValue, setAddressValue] = useState('')
   const [renaming, setRenaming] = useState<string | null>(null)
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; entry?: FileEntry } | null>(null)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; entry?: FileEntry; paneId: PaneId } | null>(null)
   const [notesOpen, setNotesOpen] = useState(false)
   const [notes, setNotes] = useState<ImprovementNote[]>([])
   const [noteDraft, setNoteDraft] = useState('')
   const [notesError, setNotesError] = useState('')
   const [savingNote, setSavingNote] = useState(false)
   const [doneNotesExpanded, setDoneNotesExpanded] = useState(false)
-  const renameRef = useRef<HTMLInputElement>(null)
   const noteInputRef = useRef<HTMLTextAreaElement>(null)
+
+  const left = useFolderPane(api, showHidden)
+  const right = useFolderPane(api, showHidden)
+  const pane = activePane === 'left' ? left : right
+  const otherPane = activePane === 'left' ? right : left
 
   const openNotesPanel = useCallback(() => {
     setDoneNotesExpanded(false)
     setNotesOpen(true)
   }, [])
 
-  const navigate = useCallback((targetPath: string) => {
-    if (!targetPath || targetPath === currentPath) return
-    const nextHistory = history.slice(0, historyIndex + 1)
-    nextHistory.push(targetPath)
-    setHistory(nextHistory)
-    setHistoryIndex(nextHistory.length - 1)
-    setCurrentPath(targetPath)
-    setSelected(new Set())
-    setSearch('')
-    setError('')
-  }, [currentPath, history, historyIndex])
-
   useEffect(() => {
     if (!api) {
-      setLoading(false)
-      setError('Panorama needs to run as a desktop app. Use npm run dev to launch it.')
+      left.setError('Panorama needs to run as a desktop app. Use npm run dev to launch it.')
       return
     }
     api.getLocations().then((items) => {
       setLocations(items)
       const initialPath = items.find((item) => item.name === 'Home')?.path ?? '/'
-      setCurrentPath(initialPath)
-      setHistory([initialPath])
-      setHistoryIndex(0)
-    }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : String(reason)))
+      left.initPath(initialPath)
+      right.initPath(initialPath)
+    }).catch((reason: unknown) => left.setError(reason instanceof Error ? reason.message : String(reason)))
+  }, [api]) // eslint-disable-line react-hooks/exhaustive-deps -- init once when api is ready
+
+  const refreshActive = useCallback(() => {
+    pane.refresh()
+    if (dualPane && otherPane.path === pane.path) otherPane.refresh()
+  }, [pane, otherPane, dualPane])
+
+  const refreshAll = useCallback(() => {
+    left.refresh()
+    if (dualPane) right.refresh()
+  }, [left, right, dualPane])
+
+  const openEntryIn = useCallback((target: typeof left, entry: FileEntry) => {
+    if (entry.isDirectory) target.navigate(entry.path)
+    else api?.open(entry.path).catch((reason: unknown) => target.setError(String(reason)))
   }, [api])
-
-  const refresh = useCallback(() => setRefreshToken((value) => value + 1), [])
-
-  useEffect(() => {
-    if (!api || !currentPath) return
-    let active = true
-    setLoading(true)
-    setError('')
-    api.readDirectory(currentPath, showHidden)
-      .then((items) => { if (active) setEntries(items) })
-      .catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : String(reason)) })
-      .finally(() => { if (active) setLoading(false) })
-    return () => { active = false }
-  }, [api, currentPath, showHidden, refreshToken])
-
-  useEffect(() => {
-    if (renaming) {
-      renameRef.current?.focus()
-      renameRef.current?.select()
-    }
-  }, [renaming])
-
-  const visibleEntries = useMemo(() => {
-    const query = search.toLocaleLowerCase()
-    return entries.filter((entry) => entry.name.toLocaleLowerCase().includes(query)).sort((a, b) => {
-      if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1
-      let result = 0
-      if (sort.key === 'name') result = a.name.localeCompare(b.name, undefined, { numeric: true })
-      if (sort.key === 'modified') result = new Date(a.modified).getTime() - new Date(b.modified).getTime()
-      if (sort.key === 'type') result = fileType(a).localeCompare(fileType(b))
-      if (sort.key === 'size') result = a.size - b.size
-      return sort.ascending ? result : -result
-    })
-  }, [entries, search, sort])
-
-  const goBack = useCallback(() => {
-    if (historyIndex <= 0) return
-    const nextIndex = historyIndex - 1
-    setHistoryIndex(nextIndex)
-    setCurrentPath(history[nextIndex])
-    setSelected(new Set())
-  }, [history, historyIndex])
-
-  const goForward = useCallback(() => {
-    if (historyIndex >= history.length - 1) return
-    const nextIndex = historyIndex + 1
-    setHistoryIndex(nextIndex)
-    setCurrentPath(history[nextIndex])
-    setSelected(new Set())
-  }, [history, historyIndex])
-
-  const goUp = useCallback(() => {
-    if (!currentPath || currentPath === '/') return
-    navigate(currentPath.slice(0, currentPath.lastIndexOf('/')) || '/')
-  }, [currentPath, navigate])
-
-  const selectedEntries = entries.filter((entry) => selected.has(entry.path))
-
-  const chooseEntry = (entry: FileEntry, event: React.MouseEvent) => {
-    if (event.metaKey || event.ctrlKey) {
-      setSelected((previous) => {
-        const next = new Set(previous)
-        if (next.has(entry.path)) next.delete(entry.path)
-        else next.add(entry.path)
-        return next
-      })
-    } else setSelected(new Set([entry.path]))
-  }
-
-  const openEntry = useCallback((entry: FileEntry) => {
-    if (entry.isDirectory) navigate(entry.path)
-    else api?.open(entry.path).catch((reason: unknown) => setError(String(reason)))
-  }, [api, navigate])
 
   const createFolder = async () => {
     if (!api) return
     try {
-      const newPath = await api.newFolder(currentPath)
-      refresh()
-      setSelected(new Set([newPath]))
+      const newPath = await api.newFolder(pane.path)
+      refreshAll()
+      pane.setSelected(new Set([newPath]))
       setRenaming(newPath)
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason))
+      pane.setError(reason instanceof Error ? reason.message : String(reason))
     }
   }
 
@@ -213,37 +89,37 @@ function App() {
     if (!api || !newName.trim() || newName === entry.name) return
     try {
       await api.rename(entry.path, newName.trim())
-      refresh()
+      refreshAll()
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason))
+      pane.setError(reason instanceof Error ? reason.message : String(reason))
     }
   }
 
   const removeSelected = useCallback(async () => {
-    if (!api || selected.size === 0) return
+    if (!api || pane.selected.size === 0) return
     try {
-      await api.trash([...selected])
-      setSelected(new Set())
-      refresh()
+      await api.trash([...pane.selected])
+      pane.setSelected(new Set())
+      refreshAll()
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason))
+      pane.setError(reason instanceof Error ? reason.message : String(reason))
     }
-  }, [api, refresh, selected])
+  }, [api, pane, refreshAll])
 
   const copySelected = useCallback(async (cut: boolean) => {
-    if (!api || selected.size === 0) return
-    await api.setClipboard([...selected], cut)
-  }, [api, selected])
+    if (!api || pane.selected.size === 0) return
+    await api.setClipboard([...pane.selected], cut)
+  }, [api, pane])
 
   const paste = useCallback(async () => {
     if (!api) return
     try {
-      await api.paste(currentPath)
-      refresh()
+      await api.paste(pane.path)
+      refreshAll()
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason))
+      pane.setError(reason instanceof Error ? reason.message : String(reason))
     }
-  }, [api, currentPath, refresh])
+  }, [api, pane, refreshAll])
 
   const loadNotes = useCallback(async () => {
     if (!api) return
@@ -289,6 +165,8 @@ function App() {
     }
   }, [api, loadNotes])
 
+  const selectedEntries = pane.entries.filter((entry) => pane.selected.has(entry.path))
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement
@@ -297,8 +175,13 @@ function App() {
         return
       }
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
-      if (event.key === 'Backspace' && !event.metaKey) goBack()
-      if ((event.key === 'Delete' || (event.metaKey && event.key === 'Backspace')) && selected.size) {
+      if (event.key === 'Tab' && dualPane) {
+        event.preventDefault()
+        setActivePane((current) => current === 'left' ? 'right' : 'left')
+        return
+      }
+      if (event.key === 'Backspace' && !event.metaKey) pane.goBack()
+      if ((event.key === 'Delete' || (event.metaKey && event.key === 'Backspace')) && pane.selected.size) {
         event.preventDefault()
         void removeSelected()
       }
@@ -307,47 +190,18 @@ function App() {
       if (event.metaKey && event.key.toLowerCase() === 'v') void paste()
       if (event.metaKey && event.key.toLowerCase() === 'l') {
         event.preventDefault()
-        setAddressValue(currentPath)
+        setAddressValue(pane.path)
         setEditingAddress(true)
       }
       if (event.metaKey && event.key.toLowerCase() === 'a') {
         event.preventDefault()
-        setSelected(new Set(visibleEntries.map((entry) => entry.path)))
+        pane.setSelected(new Set(pane.visibleEntries.map((entry) => entry.path)))
       }
-      if (event.key === 'Enter' && selectedEntries.length === 1) openEntry(selectedEntries[0])
+      if (event.key === 'Enter' && selectedEntries.length === 1) openEntryIn(pane, selectedEntries[0])
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   })
-
-  const setSortKey = (key: SortKey) => {
-    setSort((previous) => ({ key, ascending: previous.key === key ? !previous.ascending : true }))
-  }
-
-  const startColumnResize = (key: SortKey, event: React.PointerEvent<HTMLSpanElement>) => {
-    event.preventDefault()
-    event.stopPropagation()
-    const header = event.currentTarget.parentElement
-    if (!header) return
-
-    const startX = event.clientX
-    const startWidth = header.getBoundingClientRect().width
-    const minimumWidths: Record<SortKey, number> = { name: 140, modified: 130, type: 90, size: 70 }
-
-    const onPointerMove = (moveEvent: PointerEvent) => {
-      const width = Math.max(minimumWidths[key], startWidth + moveEvent.clientX - startX)
-      setColumnWidths((previous) => ({ ...previous, [key]: width }))
-    }
-    const onPointerUp = () => {
-      window.removeEventListener('pointermove', onPointerMove)
-      window.removeEventListener('pointerup', onPointerUp)
-      document.body.classList.remove('resizing-column')
-    }
-
-    document.body.classList.add('resizing-column')
-    window.addEventListener('pointermove', onPointerMove)
-    window.addEventListener('pointerup', onPointerUp)
-  }
 
   const startSidebarResize = (event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -368,13 +222,26 @@ function App() {
     window.addEventListener('pointerup', onPointerUp)
   }
 
-  const showContextMenu = (event: React.MouseEvent, entry?: FileEntry) => {
+  const showContextMenu = (paneId: PaneId, event: React.MouseEvent, entry?: FileEntry) => {
     event.preventDefault()
-    if (entry && !selected.has(entry.path)) setSelected(new Set([entry.path]))
-    setContextMenu({ x: event.clientX, y: event.clientY, entry })
+    setActivePane(paneId)
+    const target = paneId === 'left' ? left : right
+    if (entry && !target.selected.has(entry.path)) target.setSelected(new Set([entry.path]))
+    setContextMenu({ x: event.clientX, y: event.clientY, entry, paneId })
   }
 
-  const pathParts = currentPath.split('/').filter(Boolean)
+  const toggleDualPane = () => {
+    if (!dualPane) {
+      if (left.path) right.initPath(left.path)
+      setActivePane('left')
+      setDualPane(true)
+    } else {
+      setActivePane('left')
+      setDualPane(false)
+    }
+  }
+
+  const pathParts = pane.path.split('/').filter(Boolean)
   const openNotes = notes.filter((note) => note.status === 'open')
   const doneNotes = notes.filter((note) => note.status === 'done')
 
@@ -392,23 +259,23 @@ function App() {
           {locations.map((location) => {
             const Icon = locationIcons[location.icon as keyof typeof locationIcons] ?? Folder
             return (
-              <button className={`nav-item ${currentPath === location.path ? 'active' : ''}`} key={location.path} onClick={() => navigate(location.path)}>
+              <button className={`nav-item ${pane.path === location.path ? 'active' : ''}`} key={location.path} onClick={() => pane.navigate(location.path)}>
                 <Icon size={17} /><span>{location.name}</span>
               </button>
             )
           })}
           <p className="nav-label devices-label">Locations</p>
-          <button className={`nav-item ${currentPath === '/' ? 'active' : ''}`} onClick={() => navigate('/')}>
+          <button className={`nav-item ${pane.path === '/' ? 'active' : ''}`} onClick={() => pane.navigate('/')}>
             <HardDrive size={17} /><span>Macintosh HD</span>
           </button>
           <button className="nav-item" onClick={async () => {
             const folder = await api?.chooseFolder()
-            if (folder) navigate(folder)
+            if (folder) pane.navigate(folder)
           }}>
             <Plus size={17} /><span>Open folder…</span>
           </button>
         </nav>
-        <div className="sidebar-footer"><Info size={14} /><span>{selected.size ? `${selected.size} selected` : `${entries.length} items`}</span></div>
+        <div className="sidebar-footer"><Info size={14} /><span>{pane.selected.size ? `${pane.selected.size} selected` : `${pane.entries.length} items`}</span></div>
         <div
           className="sidebar-resize-handle"
           role="separator"
@@ -435,23 +302,23 @@ function App() {
       <section className="workspace">
         <header className="titlebar">
           <div className="nav-controls">
-            <button title="Back" disabled={historyIndex <= 0} onClick={goBack}><ArrowLeft /></button>
-            <button title="Forward" disabled={historyIndex >= history.length - 1} onClick={goForward}><ArrowRight /></button>
-            <button title="Up one level" disabled={currentPath === '/'} onClick={goUp}><ArrowUp /></button>
-            <button title="Refresh" onClick={refresh}><RefreshCw className={loading ? 'spinning' : ''} /></button>
+            <button title="Back" disabled={pane.historyIndex <= 0} onClick={pane.goBack}><ArrowLeft /></button>
+            <button title="Forward" disabled={pane.historyIndex >= pane.history.length - 1} onClick={pane.goForward}><ArrowRight /></button>
+            <button title="Up one level" disabled={pane.path === '/'} onClick={pane.goUp}><ArrowUp /></button>
+            <button title="Refresh" onClick={refreshActive}><RefreshCw className={pane.loading ? 'spinning' : ''} /></button>
           </div>
 
           {editingAddress ? (
             <form className="address-input-wrap" onSubmit={(event) => {
               event.preventDefault()
               setEditingAddress(false)
-              navigate(addressValue)
+              pane.navigate(addressValue)
             }}>
               <Folder size={15} />
               <input autoFocus value={addressValue} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setAddressValue(event.target.value)} onBlur={() => setEditingAddress(false)} />
             </form>
           ) : (
-            <div className="breadcrumbs" title="Click to type a path" onClick={() => { setAddressValue(currentPath); setEditingAddress(true) }}>
+            <div className="breadcrumbs" title="Click to type a path" onClick={() => { setAddressValue(pane.path); setEditingAddress(true) }}>
               <button title="Macintosh HD"><HardDrive size={15} /></button>
               {pathParts.map((part, index) => {
                 const partPath = `/${pathParts.slice(0, index + 1).join('/')}`
@@ -462,19 +329,19 @@ function App() {
 
           <label className="search-box">
             <Search size={15} />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search this folder" />
-            {search && <button onClick={() => setSearch('')}>×</button>}
+            <input value={pane.search} onChange={(event) => pane.setSearch(event.target.value)} placeholder="Search this folder" />
+            {pane.search && <button onClick={() => pane.setSearch('')}>×</button>}
           </label>
         </header>
 
         <div className="commandbar">
           <button className="primary-action" onClick={() => void createFolder()}><Plus size={16} /><span>New folder</span></button>
           <div className="separator" />
-          <button disabled={!selected.size} title="Cut" onClick={() => void copySelected(true)}><Scissors /></button>
-          <button disabled={!selected.size} title="Copy" onClick={() => void copySelected(false)}><Copy /></button>
+          <button disabled={!pane.selected.size} title="Cut" onClick={() => void copySelected(true)}><Scissors /></button>
+          <button disabled={!pane.selected.size} title="Copy" onClick={() => void copySelected(false)}><Copy /></button>
           <button title="Paste" onClick={() => void paste()}><Clipboard /></button>
-          <button disabled={selected.size !== 1} title="Rename" onClick={() => selectedEntries[0] && setRenaming(selectedEntries[0].path)}><Pencil /></button>
-          <button disabled={!selected.size} title="Move to Trash" onClick={() => void removeSelected()}><Trash2 /></button>
+          <button disabled={pane.selected.size !== 1} title="Rename" onClick={() => selectedEntries[0] && setRenaming(selectedEntries[0].path)}><Pencil /></button>
+          <button disabled={!pane.selected.size} title="Move to Trash" onClick={() => void removeSelected()}><Trash2 /></button>
           <div className="command-spacer" />
           <button className={notesOpen ? 'toggled' : ''} title="Notes" onClick={(event) => {
             event.stopPropagation()
@@ -482,77 +349,49 @@ function App() {
             else openNotesPanel()
           }}><StickyNote />{openNotes.length > 0 && <span className="notes-badge">{openNotes.length}</span>}</button>
           <button className={showHidden ? 'toggled' : ''} title={showHidden ? 'Hide hidden files' : 'Show hidden files'} onClick={() => setShowHidden((value) => !value)}><Eye /></button>
+          <button className={dualPane ? 'toggled' : ''} title={dualPane ? 'Single pane' : 'Two panes'} onClick={toggleDualPane}><Columns2 /></button>
           <div className="view-switcher">
             <button className={view === 'list' ? 'active' : ''} onClick={() => setView('list')} title="Details view"><List /></button>
             <button className={view === 'grid' ? 'active' : ''} onClick={() => setView('grid')} title="Icon view"><Grid2X2 /></button>
           </div>
           <button title="More options" onClick={(event) => {
             event.stopPropagation()
-            setContextMenu({ x: window.innerWidth - 225, y: 96 })
+            setContextMenu({ x: window.innerWidth - 225, y: 96, paneId: activePane })
           }}><MoreHorizontal /></button>
         </div>
 
-        <div
-          className={`file-area ${view}`}
-          style={{
-            '--column-name': columnWidths.name ? `${columnWidths.name}px` : undefined,
-            '--column-modified': columnWidths.modified ? `${columnWidths.modified}px` : undefined,
-            '--column-type': columnWidths.type ? `${columnWidths.type}px` : undefined,
-            '--column-size': columnWidths.size ? `${columnWidths.size}px` : undefined,
-          } as React.CSSProperties}
-          onClick={(event) => { if (event.target === event.currentTarget) setSelected(new Set()) }}
-          onContextMenu={(event) => showContextMenu(event)}
-        >
-          {view === 'list' && (
-            <div className="file-header">
-              {([['name', 'Name'], ['modified', 'Date modified'], ['type', 'Type'], ['size', 'Size']] as [SortKey, string][]).map(([key, label]) => (
-                <button key={key} onClick={() => setSortKey(key)}>
-                  <span>{label}</span>
-                  {sort.key === key && (sort.ascending ? <ArrowUp /> : <ArrowDown />)}
-                  <span
-                    className="column-resize-handle"
-                    onPointerDown={(event) => startColumnResize(key, event)}
-                    onClick={(event) => event.stopPropagation()}
-                  />
-                </button>
-              ))}
-            </div>
-          )}
-
-          {loading && !entries.length ? (
-            <div className="empty-state"><RefreshCw className="spinning" /><p>Loading folder…</p></div>
-          ) : error ? (
-            <div className="empty-state error-state"><FolderOpen /><h2>Can’t open this location</h2><p>{error}</p></div>
-          ) : visibleEntries.length === 0 ? (
-            <div className="empty-state"><FolderOpen /><h2>{search ? 'No matching files' : 'This folder is empty'}</h2><p>{search ? `Nothing here matches “${search}”.` : 'Files you add will appear here.'}</p></div>
-          ) : (
-            <div className="file-list">
-              {visibleEntries.map((entry) => (
-                <div className={`file-row ${selected.has(entry.path) ? 'selected' : ''}`} key={entry.path} onClick={(event) => chooseEntry(entry, event)} onDoubleClick={() => openEntry(entry)} onContextMenu={(event) => showContextMenu(event, entry)} title={entry.path}>
-                  <div className="file-name">
-                    {view === 'grid' && !entry.isDirectory && imageExtensions.includes(entry.extension)
-                      ? <ImagePreview entry={entry} />
-                      : <FileIcon entry={entry} size={view === 'grid' ? 48 : 20} />}
-                    {renaming === entry.path ? (
-                      <input autoFocus ref={renameRef} defaultValue={entry.name} onClick={(event) => event.stopPropagation()} onBlur={(event) => void submitRename(entry, event.target.value)} onKeyDown={(event) => {
-                        if (event.key === 'Enter') event.currentTarget.blur()
-                        if (event.key === 'Escape') setRenaming(null)
-                      }} />
-                    ) : <span>{entry.name}</span>}
-                  </div>
-                  <span className="modified">{new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(entry.modified))}</span>
-                  <span className="file-type">{fileType(entry)}</span>
-                  <span className="file-size">{formatSize(entry.size, entry.isDirectory)}</span>
-                </div>
-              ))}
-            </div>
+        <div className={`panes${dualPane ? ' dual' : ''}`}>
+          <FolderPane
+            pane={left}
+            view={view}
+            active={activePane === 'left'}
+            renaming={renaming}
+            onActivate={() => setActivePane('left')}
+            onOpenEntry={(entry) => openEntryIn(left, entry)}
+            onRenameSubmit={(entry, name) => void submitRename(entry, name)}
+            onCancelRename={() => setRenaming(null)}
+            onContextMenu={(event, entry) => showContextMenu('left', event, entry)}
+          />
+          {dualPane && (
+            <FolderPane
+              pane={right}
+              view={view}
+              active={activePane === 'right'}
+              renaming={renaming}
+              onActivate={() => setActivePane('right')}
+              onOpenEntry={(entry) => openEntryIn(right, entry)}
+              onRenameSubmit={(entry, name) => void submitRename(entry, name)}
+              onCancelRename={() => setRenaming(null)}
+              onContextMenu={(event, entry) => showContextMenu('right', event, entry)}
+            />
           )}
         </div>
 
         <footer className="statusbar">
-          <span>{visibleEntries.length} {visibleEntries.length === 1 ? 'item' : 'items'}</span>
-          {selected.size > 0 && <><span className="status-dot">•</span><span>{selected.size} selected</span></>}
-          <span className="status-path">{currentPath}</span>
+          <span>{pane.visibleEntries.length} {pane.visibleEntries.length === 1 ? 'item' : 'items'}</span>
+          {pane.selected.size > 0 && <><span className="status-dot">•</span><span>{pane.selected.size} selected</span></>}
+          {dualPane && <><span className="status-dot">•</span><span>{activePane === 'left' ? 'Left' : 'Right'} pane</span></>}
+          <span className="status-path">{pane.path}</span>
         </footer>
       </section>
 
@@ -560,7 +399,10 @@ function App() {
         <div className="context-menu" style={{ left: Math.min(contextMenu.x, window.innerWidth - 220), top: Math.min(contextMenu.y, window.innerHeight - 260) }} onClick={(event) => event.stopPropagation()}>
           {contextMenu.entry ? (
             <>
-              <button onClick={() => { openEntry(contextMenu.entry!); setContextMenu(null) }}><FolderOpen />Open</button>
+              <button onClick={() => {
+                openEntryIn(contextMenu.paneId === 'left' ? left : right, contextMenu.entry!)
+                setContextMenu(null)
+              }}><FolderOpen />Open</button>
               {!contextMenu.entry.isDirectory && <button onClick={() => { void api?.reveal(contextMenu.entry!.path); setContextMenu(null) }}><Search />Show in Finder</button>}
               <div />
               <button onClick={() => { void copySelected(false); setContextMenu(null) }}><Copy />Copy</button>
@@ -574,7 +416,7 @@ function App() {
               <button onClick={() => { void createFolder(); setContextMenu(null) }}><Plus />New folder</button>
               <button onClick={() => { void paste(); setContextMenu(null) }}><Clipboard />Paste</button>
               <div />
-              <button onClick={() => { refresh(); setContextMenu(null) }}><RefreshCw />Refresh</button>
+              <button onClick={() => { refreshActive(); setContextMenu(null) }}><RefreshCw />Refresh</button>
             </>
           )}
         </div>
