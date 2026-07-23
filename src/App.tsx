@@ -87,6 +87,7 @@ function App() {
   const [noteDraft, setNoteDraft] = useState('')
   const [notesError, setNotesError] = useState('')
   const [savingNote, setSavingNote] = useState(false)
+  const [doneNotesExpanded, setDoneNotesExpanded] = useState(false)
   const renameRef = useRef<HTMLInputElement>(null)
   const noteInputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -626,18 +627,28 @@ function App() {
 
             {doneNotes.length > 0 && (
               <section className="notes-section notes-done">
-                <h3>Done ({doneNotes.length})</h3>
-                <ul className="notes-list">
-                  {doneNotes.map((note) => (
-                    <li key={note.id} className="done">
-                      <button type="button" className="note-status checked" title="Reopen" onClick={() => void toggleNoteStatus(note)} aria-label="Reopen" />
-                      <div>
-                        <p>{note.body}</p>
-                        {note.folderPath && <span className="note-meta">{note.folderPath}</span>}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                <button
+                  type="button"
+                  className="notes-done-toggle"
+                  aria-expanded={doneNotesExpanded}
+                  onClick={() => setDoneNotesExpanded((value) => !value)}
+                >
+                  <span className={`notes-done-chevron${doneNotesExpanded ? ' open' : ''}`} aria-hidden="true" />
+                  Done ({doneNotes.length})
+                </button>
+                {doneNotesExpanded && (
+                  <ul className="notes-list">
+                    {doneNotes.map((note) => (
+                      <li key={note.id} className="done">
+                        <button type="button" className="note-status checked" title="Reopen" onClick={() => void toggleNoteStatus(note)} aria-label="Reopen" />
+                        <div>
+                          <p>{note.body}</p>
+                          {note.folderPath && <span className="note-meta">{note.folderPath}</span>}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </section>
             )}
           </aside>
