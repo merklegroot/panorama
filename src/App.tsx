@@ -12,7 +12,7 @@ import { useFolderPane } from './useFolderPane'
 
 type PaneId = 'left' | 'right'
 
-const locationIcons = { home: Home, monitor: Monitor, file: FileText, download: Download, image: Image, music: Music, video: Video }
+const locationIcons = { home: Home, monitor: Monitor, file: FileText, download: Download, image: Image, music: Music, video: Video, trash: Trash2 }
 
 function App() {
   const api = window.explorer
@@ -20,7 +20,7 @@ function App() {
   const [dualPane, setDualPane] = useState(false)
   const [activePane, setActivePane] = useState<PaneId>('left')
   const [view, setView] = useState<ViewMode>('list')
-  const [sidebarWidth, setSidebarWidth] = useState(220)
+  const [sidebarWidth, setSidebarWidth] = useState(180)
   const [showHidden, setShowHidden] = useState(false)
   const [editingAddress, setEditingAddress] = useState(false)
   const [addressValue, setAddressValue] = useState('')

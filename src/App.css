@@ -16,7 +16,7 @@ button { color: inherit; }
   width: 100vw;
   height: 100vh;
   display: grid;
-  grid-template-columns: var(--sidebar-width, 220px) minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-width, 180px) minmax(0, 1fr);
   overflow: hidden;
   color: var(--ink);
   background: var(--panel);

@@ -168,6 +168,7 @@ function registerIpc() {
       ['Pictures', path.join(home, 'Pictures'), 'image'],
       ['Music', path.join(home, 'Music'), 'music'],
       ['Movies', path.join(home, 'Movies'), 'video'],
+      ['Trash', path.join(home, '.Trash'), 'trash'],
     ]
     const locations = []
     for (const [name, locationPath, icon] of candidates) {
