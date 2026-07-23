@@ -479,11 +479,13 @@ function App() {
                 openEntryIn(contextMenu.paneId === 'left' ? left : right, contextMenu.entry!)
                 setContextMenu(null)
               }}><FolderOpen />Open</button>
-              <button type="button" onClick={() => {
-                void api?.openWith(contextMenu.entry!.path)
-                  .catch((reason: unknown) => pane.setError(reason instanceof Error ? reason.message : String(reason)))
-                setContextMenu(null)
-              }}><AppWindow />Open With…</button>
+              {!contextMenu.entry.isDirectory && (
+                <button type="button" onClick={() => {
+                  void api?.openWith(contextMenu.entry!.path)
+                    .catch((reason: unknown) => pane.setError(reason instanceof Error ? reason.message : String(reason)))
+                  setContextMenu(null)
+                }}><AppWindow />Open With…</button>
+              )}
               {!contextMenu.entry.isDirectory && <button type="button" onClick={() => { void api?.reveal(contextMenu.entry!.path); setContextMenu(null) }}><Search />Show in Finder</button>}
               <div />
               <button type="button" onClick={() => { void copySelected(false); setContextMenu(null) }}><Copy />Copy</button>
