@@ -6,13 +6,29 @@ const path = require('node:path')
 app.setName('Panorama')
 
 const isDev = !app.isPackaged
-const notesPath = path.join(__dirname, '..', 'notes', 'improvements.json')
 let mainWindow
 let clipboard = { paths: [], cut: false }
+let notesPath
+
+function resolveNotesPath() {
+  if (notesPath) return notesPath
+
+  if (!app.isPackaged) {
+    notesPath = path.join(__dirname, '..', 'notes', 'improvements.json')
+    return notesPath
+  }
+
+  // Packaged builds used via the repo launcher live at:
+  //   <repo>/release/mac-<arch>/Panorama.app/Contents/MacOS/Panorama
+  // Notes must stay in the repo (outside app.asar) so Cursor can read them.
+  const repoRoot = path.resolve(path.dirname(app.getPath('exe')), '..', '..', '..', '..', '..')
+  notesPath = path.join(repoRoot, 'notes', 'improvements.json')
+  return notesPath
+}
 
 async function readNotesFile() {
   try {
-    const raw = await fs.readFile(notesPath, 'utf8')
+    const raw = await fs.readFile(resolveNotesPath(), 'utf8')
     const parsed = JSON.parse(raw)
     return Array.isArray(parsed.notes) ? parsed : { notes: [] }
   } catch (error) {
@@ -22,8 +38,9 @@ async function readNotesFile() {
 }
 
 async function writeNotesFile(data) {
-  await fs.mkdir(path.dirname(notesPath), { recursive: true })
-  await fs.writeFile(notesPath, `${JSON.stringify(data, null, 2)}\n`, 'utf8')
+  const target = resolveNotesPath()
+  await fs.mkdir(path.dirname(target), { recursive: true })
+  await fs.writeFile(target, `${JSON.stringify(data, null, 2)}\n`, 'utf8')
 }
 
 function createWindow() {

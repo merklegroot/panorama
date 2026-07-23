@@ -1,6 +1,14 @@
 {
   "notes": [
     {
+      "id": "note_mrxofj1c_pyd4wl",
+      "body": "make the done notes less prominent",
+      "status": "open",
+      "createdAt": "2026-07-23T15:39:12.288Z",
+      "completedAt": null,
+      "folderPath": null
+    },
+    {
       "id": "note_mrxntr24_4t2smq",
       "body": "get rid of the attach to current folder checkbox. also, just call it notes. it's only going to go to cursor for me. a user using it would just use it as personal notes unrelated to making improvements.",
       "status": "done",

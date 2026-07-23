@@ -10,6 +10,7 @@
     "start": "electron .",
     "build": "tsc -b && vite build",
     "dist:mac": "npm run build && electron-builder --mac --publish never",
+    "install:mac": "node scripts/install-mac.cjs",
     "lint": "oxlint",
     "preview": "vite preview"
   },
