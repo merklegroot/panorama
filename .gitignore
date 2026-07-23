@@ -13,6 +13,9 @@ dist-ssr
 release
 *.local
 
+# Local personal notes (not for the repo)
+notes/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
