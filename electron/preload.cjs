@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld('explorer', {
   getThumbnail: (path) => ipcRenderer.invoke('fs:thumbnail', path),
   open: (path) => ipcRenderer.invoke('fs:open', path),
   reveal: (path) => ipcRenderer.invoke('fs:reveal', path),
+  listOpenWithApps: (path) => ipcRenderer.invoke('fs:listOpenWithApps', path),
+  openWithApp: (path, appPath) => ipcRenderer.invoke('fs:openWithApp', path, appPath),
   openWith: (path) => ipcRenderer.invoke('fs:openWith', path),
   chooseFolder: () => ipcRenderer.invoke('fs:chooseFolder'),
   newFolder: (path) => ipcRenderer.invoke('fs:newFolder', path),

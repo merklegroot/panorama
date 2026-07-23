@@ -25,12 +25,20 @@ export interface ImprovementNote {
   folderPath: string | null
 }
 
+export interface OpenWithApp {
+  name: string
+  path: string
+  isDefault?: boolean
+}
+
 export interface ExplorerApi {
   getLocations(): Promise<Location[]>
   readDirectory(path: string, showHidden: boolean): Promise<FileEntry[]>
   getThumbnail(path: string): Promise<string | null>
   open(path: string): Promise<void>
   reveal(path: string): Promise<void>
+  listOpenWithApps(path: string): Promise<OpenWithApp[]>
+  openWithApp(path: string, appPath: string): Promise<void>
   openWith(path: string): Promise<boolean>
   chooseFolder(): Promise<string | null>
   newFolder(path: string): Promise<string>

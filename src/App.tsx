@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import './App.css'
 import { FolderPane, type ViewMode } from './FolderPane'
-import type { FileEntry, ImprovementNote, Location } from './types'
+import type { FileEntry, ImprovementNote, Location, OpenWithApp } from './types'
 import { useFolderPane } from './useFolderPane'
 
 type PaneId = 'left' | 'right'
@@ -27,6 +27,10 @@ function App() {
   const [editAddressRequest, setEditAddressRequest] = useState(0)
   const [renaming, setRenaming] = useState<string | null>(null)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; entry?: FileEntry; paneId: PaneId } | null>(null)
+  const [openWithApps, setOpenWithApps] = useState<OpenWithApp[]>([])
+  const [openWithOpen, setOpenWithOpen] = useState(false)
+  const [openWithLoading, setOpenWithLoading] = useState(false)
+  const [openWithSide, setOpenWithSide] = useState<'right' | 'left'>('right')
   const [notesOpen, setNotesOpen] = useState(false)
   const [notes, setNotes] = useState<ImprovementNote[]>([])
   const [noteDraft, setNoteDraft] = useState('')
@@ -293,7 +297,30 @@ function App() {
     setActivePane(paneId)
     const target = paneId === 'left' ? left : right
     if (entry && !target.selected.has(entry.path)) target.setSelected(new Set([entry.path]))
+    setOpenWithOpen(false)
+    setOpenWithApps([])
+    setOpenWithLoading(false)
+    setOpenWithSide(event.clientX > window.innerWidth - 420 ? 'left' : 'right')
     setContextMenu({ x: event.clientX, y: event.clientY, entry, paneId })
+    if (entry && !entry.isDirectory && api) {
+      setOpenWithLoading(true)
+      void api.listOpenWithApps(entry.path)
+        .then((apps) => setOpenWithApps(apps))
+        .catch(() => setOpenWithApps([]))
+        .finally(() => setOpenWithLoading(false))
+    }
+  }
+
+  const openFileWithApp = (filePath: string, appPath: string) => {
+    void api?.openWithApp(filePath, appPath)
+      .catch((reason: unknown) => pane.setError(reason instanceof Error ? reason.message : String(reason)))
+    setContextMenu(null)
+  }
+
+  const chooseAnotherApp = (filePath: string) => {
+    void api?.openWith(filePath)
+      .catch((reason: unknown) => pane.setError(reason instanceof Error ? reason.message : String(reason)))
+    setContextMenu(null)
   }
 
   const toggleDualPane = () => {
@@ -480,11 +507,49 @@ function App() {
                 setContextMenu(null)
               }}><FolderOpen />Open</button>
               {!contextMenu.entry.isDirectory && (
-                <button type="button" onClick={() => {
-                  void api?.openWith(contextMenu.entry!.path)
-                    .catch((reason: unknown) => pane.setError(reason instanceof Error ? reason.message : String(reason)))
-                  setContextMenu(null)
-                }}><AppWindow />Open With…</button>
+                <div
+                  className={`context-submenu-wrap${openWithOpen ? ' open' : ''}`}
+                  onMouseEnter={() => setOpenWithOpen(true)}
+                  onFocusCapture={() => setOpenWithOpen(true)}
+                >
+                  <button
+                    type="button"
+                    className="context-submenu-trigger"
+                    aria-haspopup="menu"
+                    aria-expanded={openWithOpen}
+                    onClick={() => setOpenWithOpen((value) => !value)}
+                  >
+                    <span className="context-item-label"><AppWindow />Open with</span>
+                    <ChevronRight size={14} />
+                  </button>
+                  {openWithOpen && (
+                    <div className={`context-submenu side-${openWithSide}`} role="menu">
+                      {openWithLoading && openWithApps.length === 0 ? (
+                        <p className="context-submenu-empty">Looking for apps…</p>
+                      ) : (
+                        openWithApps.map((app) => (
+                          <button
+                            type="button"
+                            key={app.path}
+                            role="menuitem"
+                            onClick={() => openFileWithApp(contextMenu.entry!.path, app.path)}
+                          >
+                            <span className="context-app-name">{app.name}</span>
+                            {app.isDefault && <span className="context-app-default">Default</span>}
+                          </button>
+                        ))
+                      )}
+                      <div />
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => chooseAnotherApp(contextMenu.entry!.path)}
+                      >
+                        Choose another app…
+                      </button>
+                    </div>
+                  )}
+                </div>
               )}
               {!contextMenu.entry.isDirectory && <button type="button" onClick={() => { void api?.reveal(contextMenu.entry!.path); setContextMenu(null) }}><Search />Show in Finder</button>}
               <div />

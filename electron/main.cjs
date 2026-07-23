@@ -47,6 +47,85 @@ async function writeNotesFile(data) {
   await fs.writeFile(target, `${JSON.stringify(data, null, 2)}\n`, 'utf8')
 }
 
+async function listOpenWithApps(targetPath) {
+  const script = `
+ObjC.import('AppKit');
+ObjC.import('Foundation');
+function preferred(appPath) {
+  return /^(?:\\/System)?\\/Applications\\//.test(appPath)
+    || appPath.indexOf('/System/Library/') === 0
+    || /\\/Users\\/[^/]+\\/Applications\\//.test(appPath);
+}
+function junk(appPath) {
+  return appPath.indexOf('/Caches/') !== -1
+    || appPath.indexOf('/Sparkle/') !== -1
+    || appPath.indexOf('/Downloads/') !== -1
+    || appPath.indexOf('/.Trash/') !== -1;
+}
+function run(argv) {
+  const filePath = argv[0];
+  const url = $.NSURL.fileURLWithPath(filePath);
+  const workspace = $.NSWorkspace.sharedWorkspace;
+  const fm = $.NSFileManager.defaultManager;
+  const seen = {};
+  const apps = [];
+
+  function add(appURL, isDefault) {
+    if (!appURL) return;
+    try {
+      if (appURL.isNil && appURL.isNil()) return;
+    } catch (e) {}
+    const appPath = ObjC.unwrap(appURL.path);
+    if (!appPath || junk(appPath)) return;
+    const key = String(appPath).split('/').pop().toLowerCase();
+    if (seen[key]) return;
+    if (!isDefault && !preferred(appPath)) return;
+    seen[key] = true;
+    apps.push({
+      name: ObjC.unwrap(fm.displayNameAtPath(appPath)),
+      path: appPath,
+      isDefault: !!isDefault,
+    });
+  }
+
+  const defaultApp = workspace.URLForApplicationToOpenURL(url);
+  add(defaultApp, true);
+  const all = workspace.URLsForApplicationsToOpenURL(url);
+  const count = ObjC.unwrap(all.count);
+  for (let i = 0; i < count && apps.length < 10; i++) {
+    add(all.objectAtIndex(i), false);
+  }
+  if (apps.length < 3) {
+    for (let i = 0; i < count && apps.length < 10; i++) {
+      const appURL = all.objectAtIndex(i);
+      const appPath = ObjC.unwrap(appURL.path);
+      if (!appPath || junk(appPath)) continue;
+      const key = appPath.split('/').pop().toLowerCase();
+      if (seen[key]) continue;
+      seen[key] = true;
+      apps.push({
+        name: ObjC.unwrap(fm.displayNameAtPath(appPath)),
+        path: appPath,
+        isDefault: false,
+      });
+    }
+  }
+  return JSON.stringify(apps);
+}
+`
+  try {
+    const { stdout } = await execFileAsync('osascript', ['-l', 'JavaScript', '-e', script, targetPath], {
+      timeout: 5000,
+      maxBuffer: 1024 * 1024,
+    })
+    const line = stdout.trim().split('\n').find((entry) => entry.startsWith('[')) ?? '[]'
+    const parsed = JSON.parse(line)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1240,
@@ -143,11 +222,28 @@ function registerIpc() {
 
   ipcMain.handle('fs:reveal', (_event, targetPath) => shell.showItemInFolder(targetPath))
 
+  ipcMain.handle('fs:listOpenWithApps', async (_event, targetPath) => {
+    if (typeof targetPath !== 'string' || !targetPath) return []
+    return listOpenWithApps(targetPath)
+  })
+
+  ipcMain.handle('fs:openWithApp', async (_event, targetPath, appPath) => {
+    if (typeof targetPath !== 'string' || !targetPath || typeof appPath !== 'string' || !appPath) {
+      throw new Error('Invalid open-with request.')
+    }
+    try {
+      await execFileAsync('open', ['-a', appPath, targetPath])
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : String(error))
+    }
+  })
+
   ipcMain.handle('fs:openWith', async (_event, targetPath) => {
     const result = await dialog.showOpenDialog(mainWindow, {
-      title: 'Open With',
+      title: 'Choose another app',
       defaultPath: '/Applications',
       buttonLabel: 'Open',
+      message: 'Choose an application to open this file',
       properties: ['openFile'],
       filters: [{ name: 'Applications', extensions: ['app'] }],
     })
