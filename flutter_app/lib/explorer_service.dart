@@ -791,6 +791,17 @@ function run(argv) {
     await _writeNotesFile(data);
     return ImprovementNote.fromJson(notes[index]);
   }
+
+  Future<void> deleteNote(String id) async {
+    final data = await _readNotesFile();
+    final notes = List<Map<String, dynamic>>.from(
+      (data['notes'] as List? ?? []).map((e) => Map<String, dynamic>.from(e as Map)),
+    );
+    final next = notes.where((item) => item['id'] != id).toList();
+    if (next.length == notes.length) throw Exception('Note not found.');
+    data['notes'] = next;
+    await _writeNotesFile(data);
+  }
 }
 
 /// Image extensions that can be previewed via Image.file.

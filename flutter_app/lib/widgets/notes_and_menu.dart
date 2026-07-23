@@ -237,6 +237,11 @@ class _NotesPanelState extends State<NotesPanel> {
                     ),
                   ),
           ),
+          IconButton(
+            tooltip: 'Delete note',
+            onPressed: () => app.deleteNote(note),
+            icon: const Icon(Icons.delete_outline, size: 18, color: PanoramaColors.muted),
+          ),
         ],
       ),
     );

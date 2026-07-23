@@ -53,8 +53,9 @@ class CommandBar extends StatelessWidget {
           const Spacer(),
           _Tb(
             icon: Icons.terminal,
-            tip: 'Open Terminal Here',
-            onPressed: controller.openTerminalHere,
+            tip: controller.terminalOpen ? 'Close terminal' : 'Terminal',
+            toggled: controller.terminalOpen,
+            onPressed: controller.toggleTerminalPanel,
           ),
           _Tb(
             icon: Icons.memory_outlined,

@@ -43,6 +43,9 @@ class AppController extends ChangeNotifier {
   String machineInfoError = '';
   DiskUsage? diskUsage;
   String _diskUsageForPath = '';
+  bool terminalOpen = false;
+  String terminalWorkingDirectory = '';
+  int terminalSession = 0;
 
   FolderPaneController get activePane =>
       activePaneId == PaneId.left ? left : right;
@@ -141,14 +144,36 @@ class AppController extends ChangeNotifier {
 
   Future<void> openTerminalHere() async {
     hideContextMenu();
-    try {
-      final selected = selectedEntries;
-      final directory = selected.length == 1 && selected.first.isDirectory
-          ? selected.first.path
-          : activePane.path;
-      await api.openTerminal(directory);
-    } catch (reason) {
-      activePane.setError(reason.toString());
+    final selected = selectedEntries;
+    final directory = selected.length == 1 && selected.first.isDirectory
+        ? selected.first.path
+        : activePane.path;
+    openTerminalPanel(directory);
+  }
+
+  void openTerminalPanel([String? directory]) {
+    final dir = (directory == null || directory.isEmpty) ? activePane.path : directory;
+    if (terminalOpen && terminalWorkingDirectory == dir) {
+      notifyListeners();
+      return;
+    }
+    terminalWorkingDirectory = dir;
+    terminalOpen = true;
+    terminalSession += 1;
+    notifyListeners();
+  }
+
+  void closeTerminalPanel() {
+    if (!terminalOpen) return;
+    terminalOpen = false;
+    notifyListeners();
+  }
+
+  void toggleTerminalPanel() {
+    if (terminalOpen) {
+      closeTerminalPanel();
+    } else {
+      openTerminalPanel(activePane.path);
     }
   }
 
@@ -341,6 +366,19 @@ class AppController extends ChangeNotifier {
         note.id,
         note.status == NoteStatus.open ? NoteStatus.done : NoteStatus.open,
       );
+      await loadNotes();
+    } catch (reason) {
+      notesError = reason.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> deleteNote(ImprovementNote note) async {
+    try {
+      if (editingNoteId == note.id) {
+        cancelEditNote();
+      }
+      await api.deleteNote(note.id);
       await loadNotes();
     } catch (reason) {
       notesError = reason.toString();
