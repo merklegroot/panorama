@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  ArrowLeft, ArrowRight, ArrowUp, Clipboard, Columns2, Copy, Download, Eye,
+  AppWindow, ArrowLeft, ArrowRight, ArrowUp, Clipboard, Columns2, Copy, Download, Eye,
   FileText, Folder, FolderOpen, Grid2X2, HardDrive, Home, Image, Info, List,
   Monitor, MoreHorizontal, Music, Pencil, Plus, RefreshCw, Scissors, Search,
   StickyNote, Trash2, Video, ChevronRight,
@@ -33,7 +33,11 @@ function App() {
   const [notesError, setNotesError] = useState('')
   const [savingNote, setSavingNote] = useState(false)
   const [doneNotesExpanded, setDoneNotesExpanded] = useState(false)
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
+  const [editingNoteBody, setEditingNoteBody] = useState('')
+  const [savingNoteEdit, setSavingNoteEdit] = useState(false)
   const noteInputRef = useRef<HTMLTextAreaElement>(null)
+  const noteEditRef = useRef<HTMLTextAreaElement>(null)
 
   const left = useFolderPane(api, showHidden)
   const right = useFolderPane(api, showHidden)
@@ -193,12 +197,43 @@ function App() {
     }
   }, [api, loadNotes])
 
+  const startEditNote = useCallback((note: ImprovementNote) => {
+    setEditingNoteId(note.id)
+    setEditingNoteBody(note.body)
+    setNotesError('')
+    requestAnimationFrame(() => noteEditRef.current?.focus())
+  }, [])
+
+  const cancelEditNote = useCallback(() => {
+    setEditingNoteId(null)
+    setEditingNoteBody('')
+  }, [])
+
+  const saveEditNote = useCallback(async () => {
+    if (!api || !editingNoteId || !editingNoteBody.trim() || savingNoteEdit) return
+    setSavingNoteEdit(true)
+    try {
+      await api.updateNote(editingNoteId, editingNoteBody)
+      setEditingNoteId(null)
+      setEditingNoteBody('')
+      await loadNotes()
+    } catch (reason) {
+      setNotesError(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      setSavingNoteEdit(false)
+    }
+  }, [api, editingNoteId, editingNoteBody, savingNoteEdit, loadNotes])
+
   const selectedEntries = pane.entries.filter((entry) => pane.selected.has(entry.path))
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement
       if (event.key === 'Escape' && notesOpen) {
+        if (editingNoteId) {
+          cancelEditNote()
+          return
+        }
         setNotesOpen(false)
         return
       }
@@ -336,10 +371,10 @@ function App() {
         ) : (
           <header className="titlebar">
             <div className="nav-controls">
-              <button title="Back" disabled={pane.historyIndex <= 0} onClick={pane.goBack}><ArrowLeft /></button>
-              <button title="Forward" disabled={pane.historyIndex >= pane.history.length - 1} onClick={pane.goForward}><ArrowRight /></button>
-              <button title="Up one level" disabled={pane.path === '/'} onClick={pane.goUp}><ArrowUp /></button>
-              <button title="Refresh" onClick={refreshActive}><RefreshCw className={pane.loading ? 'spinning' : ''} /></button>
+              <button type="button" data-tooltip="Back" aria-label="Back" disabled={pane.historyIndex <= 0} onClick={pane.goBack}><ArrowLeft /></button>
+              <button type="button" data-tooltip="Forward" aria-label="Forward" disabled={pane.historyIndex >= pane.history.length - 1} onClick={pane.goForward}><ArrowRight /></button>
+              <button type="button" data-tooltip="Up one level" aria-label="Up one level" disabled={pane.path === '/'} onClick={pane.goUp}><ArrowUp /></button>
+              <button type="button" data-tooltip="Refresh" aria-label="Refresh" onClick={refreshActive}><RefreshCw className={pane.loading ? 'spinning' : ''} /></button>
             </div>
 
             {editingAddress ? (
@@ -353,10 +388,10 @@ function App() {
               </form>
             ) : (
               <div className="breadcrumbs" title="Click to type a path" onClick={() => { setAddressValue(pane.path); setEditingAddress(true) }}>
-                <button title="Macintosh HD"><HardDrive size={15} /></button>
+                <button type="button" data-tooltip="Macintosh HD" aria-label="Macintosh HD"><HardDrive size={15} /></button>
                 {pathParts.map((part, index) => {
                   const partPath = `/${pathParts.slice(0, index + 1).join('/')}`
-                  return <span className="breadcrumb-part" key={partPath}><ChevronRight size={14} /><button>{part}</button></span>
+                  return <span className="breadcrumb-part" key={partPath}><ChevronRight size={14} /><button type="button">{part}</button></span>
                 })}
               </div>
             )}
@@ -364,32 +399,32 @@ function App() {
             <label className="search-box">
               <Search size={15} />
               <input value={pane.search} onChange={(event) => pane.setSearch(event.target.value)} placeholder="Search this folder" />
-              {pane.search && <button onClick={() => pane.setSearch('')}>×</button>}
+              {pane.search && <button type="button" data-tooltip="Clear search" aria-label="Clear search" onClick={() => pane.setSearch('')}>×</button>}
             </label>
           </header>
         )}
 
         <div className="commandbar">
-          <button className="primary-action" onClick={() => void createFolder()}><Plus size={16} /><span>New folder</span></button>
+          <button type="button" className="primary-action" onClick={() => void createFolder()}><Plus size={16} /><span>New folder</span></button>
           <div className="separator" />
-          <button disabled={!pane.selected.size} title="Cut" onClick={() => void copySelected(true)}><Scissors /></button>
-          <button disabled={!pane.selected.size} title="Copy" onClick={() => void copySelected(false)}><Copy /></button>
-          <button title="Paste" onClick={() => void paste()}><Clipboard /></button>
-          <button disabled={pane.selected.size !== 1} title="Rename" onClick={() => selectedEntries[0] && setRenaming(selectedEntries[0].path)}><Pencil /></button>
-          <button disabled={!pane.selected.size} title="Move to Trash" onClick={() => void removeSelected()}><Trash2 /></button>
+          <button type="button" disabled={!pane.selected.size} data-tooltip="Cut" aria-label="Cut" onClick={() => void copySelected(true)}><Scissors /></button>
+          <button type="button" disabled={!pane.selected.size} data-tooltip="Copy" aria-label="Copy" onClick={() => void copySelected(false)}><Copy /></button>
+          <button type="button" data-tooltip="Paste" aria-label="Paste" onClick={() => void paste()}><Clipboard /></button>
+          <button type="button" disabled={pane.selected.size !== 1} data-tooltip="Rename" aria-label="Rename" onClick={() => selectedEntries[0] && setRenaming(selectedEntries[0].path)}><Pencil /></button>
+          <button type="button" disabled={!pane.selected.size} data-tooltip="Move to Trash" aria-label="Move to Trash" onClick={() => void removeSelected()}><Trash2 /></button>
           <div className="command-spacer" />
-          <button className={notesOpen ? 'toggled' : ''} title="Notes" onClick={(event) => {
+          <button type="button" className={notesOpen ? 'toggled' : ''} data-tooltip="Notes" aria-label="Notes" onClick={(event) => {
             event.stopPropagation()
             if (notesOpen) setNotesOpen(false)
             else openNotesPanel()
-          }}><StickyNote />{openNotes.length > 0 && <span className="notes-badge">{openNotes.length}</span>}</button>
-          <button className={showHidden ? 'toggled' : ''} title={showHidden ? 'Hide hidden files' : 'Show hidden files'} onClick={() => setShowHidden((value) => !value)}><Eye /></button>
-          <button className={dualPane ? 'toggled' : ''} title={dualPane ? 'Single pane' : 'Two panes'} onClick={toggleDualPane}><Columns2 /></button>
+          }}><StickyNote /></button>
+          <button type="button" className={showHidden ? 'toggled' : ''} data-tooltip={showHidden ? 'Hide hidden files' : 'Show hidden files'} aria-label={showHidden ? 'Hide hidden files' : 'Show hidden files'} onClick={() => setShowHidden((value) => !value)}><Eye /></button>
+          <button type="button" className={dualPane ? 'toggled' : ''} data-tooltip={dualPane ? 'Single pane' : 'Two panes'} aria-label={dualPane ? 'Single pane' : 'Two panes'} onClick={toggleDualPane}><Columns2 /></button>
           <div className="view-switcher">
-            <button className={view === 'list' ? 'active' : ''} onClick={() => setView('list')} title="Details view"><List /></button>
-            <button className={view === 'grid' ? 'active' : ''} onClick={() => setView('grid')} title="Icon view"><Grid2X2 /></button>
+            <button type="button" className={view === 'list' ? 'active' : ''} onClick={() => setView('list')} data-tooltip="Details view" aria-label="Details view"><List /></button>
+            <button type="button" className={view === 'grid' ? 'active' : ''} onClick={() => setView('grid')} data-tooltip="Icon view" aria-label="Icon view"><Grid2X2 /></button>
           </div>
-          <button title="More options" onClick={(event) => {
+          <button type="button" data-tooltip="More options" aria-label="More options" onClick={(event) => {
             event.stopPropagation()
             setContextMenu({ x: window.innerWidth - 225, y: 96, paneId: activePane })
           }}><MoreHorizontal /></button>
@@ -437,27 +472,32 @@ function App() {
       </section>
 
       {contextMenu && (
-        <div className="context-menu" style={{ left: Math.min(contextMenu.x, window.innerWidth - 220), top: Math.min(contextMenu.y, window.innerHeight - 260) }} onClick={(event) => event.stopPropagation()}>
+        <div className="context-menu" style={{ left: Math.min(contextMenu.x, window.innerWidth - 220), top: Math.min(contextMenu.y, window.innerHeight - 300) }} onClick={(event) => event.stopPropagation()}>
           {contextMenu.entry ? (
             <>
-              <button onClick={() => {
+              <button type="button" onClick={() => {
                 openEntryIn(contextMenu.paneId === 'left' ? left : right, contextMenu.entry!)
                 setContextMenu(null)
               }}><FolderOpen />Open</button>
-              {!contextMenu.entry.isDirectory && <button onClick={() => { void api?.reveal(contextMenu.entry!.path); setContextMenu(null) }}><Search />Show in Finder</button>}
+              <button type="button" onClick={() => {
+                void api?.openWith(contextMenu.entry!.path)
+                  .catch((reason: unknown) => pane.setError(reason instanceof Error ? reason.message : String(reason)))
+                setContextMenu(null)
+              }}><AppWindow />Open With…</button>
+              {!contextMenu.entry.isDirectory && <button type="button" onClick={() => { void api?.reveal(contextMenu.entry!.path); setContextMenu(null) }}><Search />Show in Finder</button>}
               <div />
-              <button onClick={() => { void copySelected(false); setContextMenu(null) }}><Copy />Copy</button>
-              <button onClick={() => { void copySelected(true); setContextMenu(null) }}><Scissors />Cut</button>
-              <button onClick={() => { setRenaming(contextMenu.entry!.path); setContextMenu(null) }}><Pencil />Rename</button>
+              <button type="button" onClick={() => { void copySelected(false); setContextMenu(null) }}><Copy />Copy</button>
+              <button type="button" onClick={() => { void copySelected(true); setContextMenu(null) }}><Scissors />Cut</button>
+              <button type="button" onClick={() => { setRenaming(contextMenu.entry!.path); setContextMenu(null) }}><Pencil />Rename</button>
               <div />
-              <button className="danger" onClick={() => { void removeSelected(); setContextMenu(null) }}><Trash2 />Move to Trash</button>
+              <button type="button" className="danger" onClick={() => { void removeSelected(); setContextMenu(null) }}><Trash2 />Move to Trash</button>
             </>
           ) : (
             <>
-              <button onClick={() => { void createFolder(); setContextMenu(null) }}><Plus />New folder</button>
-              <button onClick={() => { void paste(); setContextMenu(null) }}><Clipboard />Paste</button>
+              <button type="button" onClick={() => { void createFolder(); setContextMenu(null) }}><Plus />New folder</button>
+              <button type="button" onClick={() => { void paste(); setContextMenu(null) }}><Clipboard />Paste</button>
               <div />
-              <button onClick={() => { refreshActive(); setContextMenu(null) }}><RefreshCw />Refresh</button>
+              <button type="button" onClick={() => { refreshActive(); setContextMenu(null) }}><RefreshCw />Refresh</button>
             </>
           )}
         </div>
@@ -471,7 +511,7 @@ function App() {
                 <h2>Notes</h2>
                 <p>Jot things down while you browse.</p>
               </div>
-              <button type="button" className="notes-close" onClick={() => setNotesOpen(false)} aria-label="Close notes">×</button>
+              <button type="button" className="notes-close" onClick={() => setNotesOpen(false)} data-tooltip="Close notes" aria-label="Close notes">×</button>
             </header>
 
             <div className="notes-composer">
@@ -503,9 +543,38 @@ function App() {
                 <ul className="notes-list">
                   {openNotes.map((note) => (
                     <li key={note.id}>
-                      <button type="button" className="note-status" title="Mark done" onClick={() => void toggleNoteStatus(note)} aria-label="Mark done" />
+                      <button type="button" className="note-status" data-tooltip="Mark done" aria-label="Mark done" onClick={() => void toggleNoteStatus(note)} />
                       <div>
-                        <p>{note.body}</p>
+                        {editingNoteId === note.id ? (
+                          <div className="note-edit">
+                            <textarea
+                              ref={noteEditRef}
+                              value={editingNoteBody}
+                              onChange={(event) => setEditingNoteBody(event.target.value)}
+                              rows={3}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Escape') {
+                                  event.preventDefault()
+                                  cancelEditNote()
+                                }
+                                if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                                  event.preventDefault()
+                                  void saveEditNote()
+                                }
+                              }}
+                            />
+                            <div className="note-edit-actions">
+                              <button type="button" className="notes-submit" disabled={!editingNoteBody.trim() || savingNoteEdit} onClick={() => void saveEditNote()}>
+                                {savingNoteEdit ? 'Saving…' : 'Save'}
+                              </button>
+                              <button type="button" className="note-edit-cancel" onClick={cancelEditNote}>Cancel</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button type="button" className="note-body-button" onClick={() => startEditNote(note)}>
+                            <p>{note.body}</p>
+                          </button>
+                        )}
                         {note.folderPath && <span className="note-meta">{note.folderPath}</span>}
                       </div>
                     </li>
@@ -529,9 +598,38 @@ function App() {
                   <ul className="notes-list">
                     {doneNotes.map((note) => (
                       <li key={note.id} className="done">
-                        <button type="button" className="note-status checked" title="Reopen" onClick={() => void toggleNoteStatus(note)} aria-label="Reopen" />
+                        <button type="button" className="note-status checked" data-tooltip="Reopen" aria-label="Reopen" onClick={() => void toggleNoteStatus(note)} />
                         <div>
-                          <p>{note.body}</p>
+                          {editingNoteId === note.id ? (
+                            <div className="note-edit">
+                              <textarea
+                                ref={noteEditRef}
+                                value={editingNoteBody}
+                                onChange={(event) => setEditingNoteBody(event.target.value)}
+                                rows={3}
+                                onKeyDown={(event) => {
+                                  if (event.key === 'Escape') {
+                                    event.preventDefault()
+                                    cancelEditNote()
+                                  }
+                                  if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                                    event.preventDefault()
+                                    void saveEditNote()
+                                  }
+                                }}
+                              />
+                              <div className="note-edit-actions">
+                                <button type="button" className="notes-submit" disabled={!editingNoteBody.trim() || savingNoteEdit} onClick={() => void saveEditNote()}>
+                                  {savingNoteEdit ? 'Saving…' : 'Save'}
+                                </button>
+                                <button type="button" className="note-edit-cancel" onClick={cancelEditNote}>Cancel</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button type="button" className="note-body-button" onClick={() => startEditNote(note)}>
+                              <p>{note.body}</p>
+                            </button>
+                          )}
                           {note.folderPath && <span className="note-meta">{note.folderPath}</span>}
                         </div>
                       </li>

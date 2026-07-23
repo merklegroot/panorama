@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('explorer', {
   getThumbnail: (path) => ipcRenderer.invoke('fs:thumbnail', path),
   open: (path) => ipcRenderer.invoke('fs:open', path),
   reveal: (path) => ipcRenderer.invoke('fs:reveal', path),
+  openWith: (path) => ipcRenderer.invoke('fs:openWith', path),
   chooseFolder: () => ipcRenderer.invoke('fs:chooseFolder'),
   newFolder: (path) => ipcRenderer.invoke('fs:newFolder', path),
   rename: (path, name) => ipcRenderer.invoke('fs:rename', path, name),
@@ -17,5 +18,6 @@ contextBridge.exposeInMainWorld('explorer', {
   importPaths: (paths, destination) => ipcRenderer.invoke('fs:importPaths', paths, destination),
   listNotes: () => ipcRenderer.invoke('notes:list'),
   addNote: (body, folderPath) => ipcRenderer.invoke('notes:add', body, folderPath),
+  updateNote: (id, body) => ipcRenderer.invoke('notes:update', id, body),
   setNoteStatus: (id, status) => ipcRenderer.invoke('notes:setStatus', id, status),
 })

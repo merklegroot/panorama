@@ -1,7 +1,11 @@
 const { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } = require('electron')
+const { execFile } = require('node:child_process')
+const { promisify } = require('node:util')
 const fs = require('node:fs/promises')
 const os = require('node:os')
 const path = require('node:path')
+
+const execFileAsync = promisify(execFile)
 
 app.setName('Panorama')
 
@@ -139,6 +143,23 @@ function registerIpc() {
 
   ipcMain.handle('fs:reveal', (_event, targetPath) => shell.showItemInFolder(targetPath))
 
+  ipcMain.handle('fs:openWith', async (_event, targetPath) => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Open With',
+      defaultPath: '/Applications',
+      buttonLabel: 'Open',
+      properties: ['openFile'],
+      filters: [{ name: 'Applications', extensions: ['app'] }],
+    })
+    if (result.canceled || !result.filePaths[0]) return false
+    try {
+      await execFileAsync('open', ['-a', result.filePaths[0], targetPath])
+      return true
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : String(error))
+    }
+  })
+
   ipcMain.handle('fs:chooseFolder', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ['openDirectory', 'createDirectory'],
@@ -235,6 +256,17 @@ function registerIpc() {
     if (!note) throw new Error('Note not found.')
     note.status = status
     note.completedAt = status === 'done' ? new Date().toISOString() : null
+    await writeNotesFile(data)
+    return note
+  })
+
+  ipcMain.handle('notes:update', async (_event, id, body) => {
+    const text = typeof body === 'string' ? body.trim() : ''
+    if (!text) throw new Error('Note text is required.')
+    const data = await readNotesFile()
+    const note = data.notes.find((item) => item.id === id)
+    if (!note) throw new Error('Note not found.')
+    note.body = text
     await writeNotesFile(data)
     return note
   })

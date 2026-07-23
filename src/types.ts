@@ -31,6 +31,7 @@ export interface ExplorerApi {
   getThumbnail(path: string): Promise<string | null>
   open(path: string): Promise<void>
   reveal(path: string): Promise<void>
+  openWith(path: string): Promise<boolean>
   chooseFolder(): Promise<string | null>
   newFolder(path: string): Promise<string>
   rename(path: string, name: string): Promise<string>
@@ -42,6 +43,7 @@ export interface ExplorerApi {
   importPaths(paths: string[], destination: string): Promise<string[]>
   listNotes(): Promise<ImprovementNote[]>
   addNote(body: string, folderPath?: string | null): Promise<ImprovementNote>
+  updateNote(id: string, body: string): Promise<ImprovementNote>
   setNoteStatus(id: string, status: NoteStatus): Promise<ImprovementNote>
 }
 

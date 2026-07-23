@@ -162,10 +162,10 @@ export function FolderPane({
       {showChrome && (
         <div className="pane-chrome">
           <div className="nav-controls">
-            <button title="Back" disabled={pane.historyIndex <= 0} onClick={pane.goBack}><ArrowLeft /></button>
-            <button title="Forward" disabled={pane.historyIndex >= pane.history.length - 1} onClick={pane.goForward}><ArrowRight /></button>
-            <button title="Up one level" disabled={pane.path === '/'} onClick={pane.goUp}><ArrowUp /></button>
-            <button title="Refresh" onClick={pane.refresh}><RefreshCw className={pane.loading ? 'spinning' : ''} /></button>
+            <button type="button" data-tooltip="Back" aria-label="Back" disabled={pane.historyIndex <= 0} onClick={pane.goBack}><ArrowLeft /></button>
+            <button type="button" data-tooltip="Forward" aria-label="Forward" disabled={pane.historyIndex >= pane.history.length - 1} onClick={pane.goForward}><ArrowRight /></button>
+            <button type="button" data-tooltip="Up one level" aria-label="Up one level" disabled={pane.path === '/'} onClick={pane.goUp}><ArrowUp /></button>
+            <button type="button" data-tooltip="Refresh" aria-label="Refresh" onClick={pane.refresh}><RefreshCw className={pane.loading ? 'spinning' : ''} /></button>
           </div>
 
           {editingAddress ? (
@@ -192,13 +192,13 @@ export function FolderPane({
                 setEditingAddress(true)
               }}
             >
-              <button title="Macintosh HD"><HardDrive size={15} /></button>
+              <button type="button" data-tooltip="Macintosh HD" aria-label="Macintosh HD"><HardDrive size={15} /></button>
               {pathParts.map((part, index) => {
                 const partPath = `/${pathParts.slice(0, index + 1).join('/')}`
                 return (
                   <span className="breadcrumb-part" key={partPath}>
                     <ChevronRight size={14} />
-                    <button>{part}</button>
+                    <button type="button">{part}</button>
                   </span>
                 )
               })}
@@ -208,7 +208,7 @@ export function FolderPane({
           <label className="search-box pane-search">
             <Search size={15} />
             <input value={pane.search} onChange={(event) => pane.setSearch(event.target.value)} placeholder="Search" />
-            {pane.search && <button type="button" onClick={() => pane.setSearch('')}>×</button>}
+            {pane.search && <button type="button" data-tooltip="Clear search" aria-label="Clear search" onClick={() => pane.setSearch('')}>×</button>}
           </label>
         </div>
       )}
@@ -268,6 +268,7 @@ export function FolderPane({
                 }}
                 onDoubleClick={() => onOpenEntry(entry)}
                 onContextMenu={(event) => {
+                  event.stopPropagation()
                   onActivate()
                   onContextMenu(event, entry)
                 }}
