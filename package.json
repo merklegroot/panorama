@@ -1,7 +1,7 @@
 {
   "name": "panorama-file-explorer",
   "private": true,
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "A Windows Explorer-inspired file manager for macOS",
   "main": "electron/main.cjs",
   "type": "module",
