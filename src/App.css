@@ -541,20 +541,6 @@ button { color: inherit; }
   font-size: 13px;
   line-height: 1.45;
 }
-.notes-folder-toggle {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: #5d6774;
-  font-size: 12px;
-}
-.notes-folder-path {
-  margin: 0;
-  color: #8994a1;
-  font-size: 11px;
-  line-height: 1.35;
-  word-break: break-all;
-}
 .notes-submit {
   align-self: flex-end;
   height: 30px;

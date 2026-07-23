@@ -85,7 +85,6 @@ function App() {
   const [notesOpen, setNotesOpen] = useState(false)
   const [notes, setNotes] = useState<ImprovementNote[]>([])
   const [noteDraft, setNoteDraft] = useState('')
-  const [includeFolder, setIncludeFolder] = useState(true)
   const [notesError, setNotesError] = useState('')
   const [savingNote, setSavingNote] = useState(false)
   const renameRef = useRef<HTMLInputElement>(null)
@@ -264,7 +263,7 @@ function App() {
     if (!api || !noteDraft.trim() || savingNote) return
     setSavingNote(true)
     try {
-      await api.addNote(noteDraft, includeFolder ? currentPath : null)
+      await api.addNote(noteDraft)
       setNoteDraft('')
       await loadNotes()
     } catch (reason) {
@@ -272,7 +271,7 @@ function App() {
     } finally {
       setSavingNote(false)
     }
-  }, [api, noteDraft, savingNote, includeFolder, currentPath, loadNotes])
+  }, [api, noteDraft, savingNote, loadNotes])
 
   const toggleNoteStatus = useCallback(async (note: ImprovementNote) => {
     if (!api) return
@@ -471,7 +470,7 @@ function App() {
           <button disabled={selected.size !== 1} title="Rename" onClick={() => selectedEntries[0] && setRenaming(selectedEntries[0].path)}><Pencil /></button>
           <button disabled={!selected.size} title="Move to Trash" onClick={() => void removeSelected()}><Trash2 /></button>
           <div className="command-spacer" />
-          <button className={notesOpen ? 'toggled' : ''} title="Improvement notes" onClick={(event) => {
+          <button className={notesOpen ? 'toggled' : ''} title="Notes" onClick={(event) => {
             event.stopPropagation()
             setNotesOpen((value) => !value)
           }}><StickyNote />{openNotes.length > 0 && <span className="notes-badge">{openNotes.length}</span>}</button>
@@ -579,8 +578,8 @@ function App() {
           <aside className="notes-panel" onClick={(event) => event.stopPropagation()}>
             <header className="notes-header">
               <div>
-                <h2>Improvement notes</h2>
-                <p>Capture ideas for Cursor to implement later.</p>
+                <h2>Notes</h2>
+                <p>Jot things down while you browse.</p>
               </div>
               <button type="button" className="notes-close" onClick={() => setNotesOpen(false)} aria-label="Close notes">×</button>
             </header>
@@ -590,7 +589,7 @@ function App() {
                 ref={noteInputRef}
                 value={noteDraft}
                 onChange={(event) => setNoteDraft(event.target.value)}
-                placeholder="What should improve?"
+                placeholder="Write a note…"
                 rows={4}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
@@ -599,11 +598,6 @@ function App() {
                   }
                 }}
               />
-              <label className="notes-folder-toggle">
-                <input type="checkbox" checked={includeFolder} onChange={(event) => setIncludeFolder(event.target.checked)} />
-                <span>Attach current folder</span>
-              </label>
-              {includeFolder && currentPath && <p className="notes-folder-path">{currentPath}</p>}
               <button type="button" className="notes-submit" disabled={!noteDraft.trim() || savingNote} onClick={() => void submitNote()}>
                 {savingNote ? 'Saving…' : 'Add note'}
               </button>

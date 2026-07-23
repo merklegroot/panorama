@@ -1,17 +1,17 @@
 ---
 name: improvement-notes
 description: >-
-  Read and implement Panorama improvement notes from notes/improvements.json,
-  then mark completed notes as done. Use when the user asks to read notes,
-  implement improvement notes, work through feedback notes, or process items
-  captured in the app's Improvement notes panel.
+  Read and implement Panorama notes from notes/improvements.json, then mark
+  completed notes as done. Use when the user asks to read notes, implement
+  notes, work through feedback notes, or process items captured in the app's
+  Notes panel.
 ---
 
-# Improvement notes
+# Notes
 
-Panorama stores agent-facing improvement requests in `notes/improvements.json`.
-Users capture them in the app (sticky-note button in the command bar). When asked
-to read or implement those notes, follow this workflow.
+Panorama stores notes in `notes/improvements.json`. Users capture them in the
+app (sticky-note button in the command bar). When asked to read or implement
+those notes, follow this workflow.
 
 ## Source of truth
 

@@ -1,3 +1,12 @@
 {
-  "notes": []
+  "notes": [
+    {
+      "id": "note_mrxntr24_4t2smq",
+      "body": "get rid of the attach to current folder checkbox. also, just call it notes. it's only going to go to cursor for me. a user using it would just use it as personal notes unrelated to making improvements.",
+      "status": "done",
+      "createdAt": "2026-07-23T15:22:16.252Z",
+      "completedAt": "2026-07-23T15:23:07.000Z",
+      "folderPath": null
+    }
+  ]
 }
