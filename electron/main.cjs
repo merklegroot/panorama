@@ -62,6 +62,11 @@ function createWindow() {
     },
   })
 
+  // Keep Finder drops in the renderer instead of navigating to file:// URLs.
+  mainWindow.webContents.on('will-navigate', (event) => {
+    event.preventDefault()
+  })
+
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173')
   } else {
@@ -178,6 +183,27 @@ function registerIpc() {
     }
     if (clipboard.cut) clipboard = { paths: [], cut: false }
     return pasted
+  })
+
+  ipcMain.handle('fs:importPaths', async (_event, sourcePaths, destinationDirectory) => {
+    if (!Array.isArray(sourcePaths) || typeof destinationDirectory !== 'string' || !destinationDirectory) {
+      throw new Error('Invalid import request.')
+    }
+    const destinationRoot = path.resolve(destinationDirectory)
+    const imported = []
+    for (const source of sourcePaths) {
+      if (typeof source !== 'string' || !source) continue
+      const resolvedSource = path.resolve(source)
+      if (resolvedSource === destinationRoot) continue
+      if (destinationRoot === resolvedSource || destinationRoot.startsWith(`${resolvedSource}${path.sep}`)) {
+        throw new Error(`Can’t copy “${path.basename(resolvedSource)}” into itself.`)
+      }
+      await fs.access(resolvedSource)
+      const destination = await uniquePath(destinationRoot, path.basename(resolvedSource))
+      await fs.cp(resolvedSource, destination, { recursive: true, errorOnExist: true })
+      imported.push(destination)
+    }
+    return imported
   })
 
   ipcMain.handle('notes:list', async () => {

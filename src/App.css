@@ -172,6 +172,11 @@ button { color: inherit; }
   border-color: rgba(47, 115, 218, 0.35);
   box-shadow: inset 0 0 0 1px rgba(47, 115, 218, 0.12);
 }
+.folder-pane.drop-target {
+  border-color: var(--blue);
+  box-shadow: inset 0 0 0 2px rgba(47, 115, 218, 0.28);
+  background: #f3f8ff;
+}
 .folder-pane .file-area {
   flex: 1;
 }

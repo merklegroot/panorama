@@ -122,6 +122,33 @@ function App() {
     }
   }, [api, pane, refreshAll])
 
+  const importExternalFiles = useCallback(async (target: typeof left, files: FileList) => {
+    if (!api || !target.path || files.length === 0) return
+    try {
+      const paths = [...files]
+        .map((file) => api.getPathForFile(file))
+        .filter((filePath) => typeof filePath === 'string' && filePath.length > 0)
+      if (paths.length === 0) throw new Error('Couldn’t read the dropped files.')
+      const imported = await api.importPaths(paths, target.path)
+      refreshAll()
+      if (imported.length > 0) target.setSelected(new Set(imported))
+    } catch (reason) {
+      target.setError(reason instanceof Error ? reason.message : String(reason))
+    }
+  }, [api, refreshAll])
+
+  useEffect(() => {
+    const preventWindowDrop = (event: DragEvent) => {
+      event.preventDefault()
+    }
+    window.addEventListener('dragover', preventWindowDrop)
+    window.addEventListener('drop', preventWindowDrop)
+    return () => {
+      window.removeEventListener('dragover', preventWindowDrop)
+      window.removeEventListener('drop', preventWindowDrop)
+    }
+  }, [])
+
   const loadNotes = useCallback(async () => {
     if (!api) return
     try {
@@ -381,6 +408,7 @@ function App() {
             onRenameSubmit={(entry, name) => void submitRename(entry, name)}
             onCancelRename={() => setRenaming(null)}
             onContextMenu={(event, entry) => showContextMenu('left', event, entry)}
+            onExternalDrop={(files) => void importExternalFiles(left, files)}
           />
           {dualPane && (
             <FolderPane
@@ -395,6 +423,7 @@ function App() {
               onRenameSubmit={(entry, name) => void submitRename(entry, name)}
               onCancelRename={() => setRenaming(null)}
               onContextMenu={(event, entry) => showContextMenu('right', event, entry)}
+              onExternalDrop={(files) => void importExternalFiles(right, files)}
             />
           )}
         </div>

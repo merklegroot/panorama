@@ -38,6 +38,8 @@ export interface ExplorerApi {
   setClipboard(paths: string[], cut: boolean): Promise<{ paths: string[]; cut: boolean }>
   getClipboard(): Promise<{ paths: string[]; cut: boolean }>
   paste(path: string): Promise<string[]>
+  getPathForFile(file: File): string
+  importPaths(paths: string[], destination: string): Promise<string[]>
   listNotes(): Promise<ImprovementNote[]>
   addNote(body: string, folderPath?: string | null): Promise<ImprovementNote>
   setNoteStatus(id: string, status: NoteStatus): Promise<ImprovementNote>

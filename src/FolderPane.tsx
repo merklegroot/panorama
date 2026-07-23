@@ -69,6 +69,7 @@ type FolderPaneProps = {
   onRenameSubmit: (entry: FileEntry, newName: string) => void
   onCancelRename: () => void
   onContextMenu: (event: React.MouseEvent, entry?: FileEntry) => void
+  onExternalDrop: (files: FileList) => void
 }
 
 export function FolderPane({
@@ -83,10 +84,12 @@ export function FolderPane({
   onRenameSubmit,
   onCancelRename,
   onContextMenu,
+  onExternalDrop,
 }: FolderPaneProps) {
   const renameRef = useRef<HTMLInputElement>(null)
   const [editingAddress, setEditingAddress] = useState(false)
   const [addressValue, setAddressValue] = useState('')
+  const [dragOver, setDragOver] = useState(false)
 
   useEffect(() => {
     if (renaming && pane.selected.has(renaming)) {
@@ -130,9 +133,31 @@ export function FolderPane({
 
   return (
     <div
-      className={`folder-pane${active ? ' active' : ''}${showChrome ? ' with-chrome' : ''}`}
+      className={`folder-pane${active ? ' active' : ''}${showChrome ? ' with-chrome' : ''}${dragOver ? ' drop-target' : ''}`}
       onMouseDown={onActivate}
       onFocusCapture={onActivate}
+      onDragEnter={(event) => {
+        if (![...event.dataTransfer.types].includes('Files')) return
+        event.preventDefault()
+        onActivate()
+        setDragOver(true)
+      }}
+      onDragOver={(event) => {
+        if (![...event.dataTransfer.types].includes('Files')) return
+        event.preventDefault()
+        event.dataTransfer.dropEffect = 'copy'
+        setDragOver(true)
+      }}
+      onDragLeave={(event) => {
+        if (event.currentTarget.contains(event.relatedTarget as Node)) return
+        setDragOver(false)
+      }}
+      onDrop={(event) => {
+        event.preventDefault()
+        setDragOver(false)
+        onActivate()
+        if (event.dataTransfer.files.length > 0) onExternalDrop(event.dataTransfer.files)
+      }}
     >
       {showChrome && (
         <div className="pane-chrome">
