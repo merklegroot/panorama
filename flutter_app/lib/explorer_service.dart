@@ -16,6 +16,11 @@ class ExplorerService {
     final home = Platform.environment['HOME'] ??
         Platform.environment['USERPROFILE'] ??
         Directory.current.path;
+    final trashPath = Platform.isMacOS
+        ? p.join(home, '.Trash')
+        : Platform.isWindows
+            ? null
+            : p.join(home, '.local', 'share', 'Trash', 'files');
     final candidates = <(String, String, String)>[
       ('Home', home, 'home'),
       ('Desktop', p.join(home, 'Desktop'), 'monitor'),
@@ -24,17 +29,17 @@ class ExplorerService {
       ('Pictures', p.join(home, 'Pictures'), 'image'),
       ('Music', p.join(home, 'Music'), 'music'),
       ('Movies', p.join(home, 'Movies'), 'video'),
-      (
-        'Trash',
-        Platform.isMacOS
-            ? p.join(home, '.Trash')
-            : p.join(home, '.local', 'share', 'Trash', 'files'),
-        'trash',
-      ),
+      if (trashPath != null) ('Trash', trashPath, 'trash'),
     ];
 
     final locations = <LocationItem>[];
     for (final (name, path, icon) in candidates) {
+      // Trash is always listed on macOS even when Directory.exists is blocked
+      // by TCC; browsing uses Finder (see readDirectory).
+      if (icon == 'trash' && Platform.isMacOS) {
+        locations.add(LocationItem(name: name, path: path, icon: icon));
+        continue;
+      }
       if (await Directory(path).exists()) {
         locations.add(LocationItem(name: name, path: path, icon: icon));
       }
@@ -42,9 +47,44 @@ class ExplorerService {
     return locations;
   }
 
+  bool isTrashPath(String directoryPath) {
+    final home = Platform.environment['HOME'] ??
+        Platform.environment['USERPROFILE'] ??
+        '';
+    if (home.isEmpty) return false;
+    final normalized = p.normalize(directoryPath);
+    if (Platform.isMacOS) {
+      return normalized == p.normalize(p.join(home, '.Trash'));
+    }
+    if (Platform.isWindows) return false;
+    return normalized ==
+        p.normalize(p.join(home, '.local', 'share', 'Trash', 'files'));
+  }
+
   Future<List<FileEntry>> readDirectory(String directoryPath, bool showHidden) async {
+    if (Platform.isMacOS && isTrashPath(directoryPath)) {
+      return _readMacTrash(showHidden);
+    }
+
     final dir = Directory(directoryPath);
-    final entities = await dir.list(followLinks: false).toList();
+    try {
+      final entities = await dir.list(followLinks: false).toList();
+      return _entriesFromEntities(entities, showHidden);
+    } on PathAccessException {
+      if (isTrashPath(directoryPath)) {
+        // Non-macOS fallback path shouldn't hit this often; rethrow with context.
+        throw Exception(
+          'Can’t read Trash. Grant Full Disk Access to Panorama in System Settings.',
+        );
+      }
+      rethrow;
+    }
+  }
+
+  Future<List<FileEntry>> _entriesFromEntities(
+    List<FileSystemEntity> entities,
+    bool showHidden,
+  ) async {
     final entries = <FileEntry>[];
 
     for (final entity in entities) {
@@ -72,6 +112,122 @@ class ExplorerService {
     }
 
     return entries;
+  }
+
+  /// List macOS Trash via Finder. Direct Directory.list on ~/.Trash is blocked
+  /// by TCC even for unsandboxed apps without Full Disk Access.
+  Future<List<FileEntry>> _readMacTrash(bool showHidden) async {
+    final home = Platform.environment['HOME'] ?? '';
+    final script = '''
+function run() {
+  const finder = Application("Finder");
+  const items = finder.trash.items();
+  const home = ${jsonEncode(home)};
+  const out = [];
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    try {
+      const name = item.name();
+      const cls = String(item.class());
+      const isDirectory = cls === "folder" || cls === "package" || cls === "disk";
+      let path = "";
+      try {
+        const url = String(item.url());
+        path = decodeURIComponent(url.replace(/^file:\\/\\//, ""));
+      } catch (e) {
+        path = home + "/.Trash/" + name;
+      }
+      let size = 0;
+      try {
+        const s = item.size();
+        if (typeof s === "number") size = s;
+      } catch (e) {}
+      let modified = new Date().toISOString();
+      try {
+        modified = item.modificationDate().toISOString();
+      } catch (e) {}
+      out.push({
+        name: name,
+        path: path,
+        isDirectory: isDirectory,
+        size: size,
+        modified: modified,
+      });
+    } catch (e) {}
+  }
+  return JSON.stringify(out);
+}
+''';
+
+    final result = await Process.run(
+      'osascript',
+      ['-l', 'JavaScript', '-e', script],
+    ).timeout(const Duration(seconds: 10));
+
+    if (result.exitCode != 0) {
+      final err = (result.stderr as String).trim();
+      throw Exception(
+        err.isEmpty
+            ? 'Can’t open Trash. Allow Panorama to control Finder if prompted.'
+            : err,
+      );
+    }
+
+    final stdout = (result.stdout as String).trim();
+    final line = stdout.split('\n').lastWhere(
+          (entry) => entry.startsWith('['),
+          orElse: () => '[]',
+        );
+
+    final parsed = jsonDecode(line) as List<dynamic>;
+    final entries = <FileEntry>[];
+    for (final item in parsed) {
+      if (item is! Map) continue;
+      final name = item['name'] as String? ?? '';
+      if (name.isEmpty) continue;
+      if (!showHidden && name.startsWith('.')) continue;
+      final isDirectory = item['isDirectory'] == true;
+      final path = item['path'] as String? ?? '';
+      final size = (item['size'] is num) ? (item['size'] as num).toInt() : 0;
+      DateTime modified;
+      try {
+        modified = DateTime.parse(item['modified'] as String? ?? '');
+      } catch (_) {
+        modified = DateTime.now();
+      }
+      entries.add(FileEntry(
+        name: name,
+        path: path.isNotEmpty ? path : p.join(home, '.Trash', name),
+        isDirectory: isDirectory,
+        isSymbolicLink: false,
+        size: size,
+        modified: modified,
+        extension: isDirectory ? '' : p.extension(name).replaceFirst('.', '').toLowerCase(),
+      ));
+    }
+    return entries;
+  }
+
+  Future<void> openNewWindow() async {
+    if (Platform.isMacOS) {
+      final exe = Platform.resolvedExecutable;
+      final marker = '.app/';
+      final index = exe.indexOf(marker);
+      if (index >= 0) {
+        final appPath = exe.substring(0, index + 4);
+        final result = await Process.run('open', ['-n', '-a', appPath]);
+        if (result.exitCode != 0) {
+          final err = (result.stderr as String).trim();
+          throw Exception(err.isEmpty ? 'Could not open a new window.' : err);
+        }
+        return;
+      }
+    }
+    await Process.start(
+      Platform.resolvedExecutable,
+      const [],
+      mode: ProcessStartMode.detached,
+    );
   }
 
   Future<void> openPath(String targetPath) async {

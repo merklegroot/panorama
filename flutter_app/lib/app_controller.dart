@@ -36,6 +36,7 @@ class AppController extends ChangeNotifier {
   PaneId contextMenuPane = PaneId.left;
   List<OpenWithApp> openWithApps = [];
   bool openWithLoading = false;
+  bool _dualPaneUsedThisSession = false;
 
   FolderPaneController get activePane =>
       activePaneId == PaneId.left ? left : right;
@@ -103,7 +104,12 @@ class AppController extends ChangeNotifier {
 
   void toggleDualPane() {
     if (!dualPane) {
-      if (left.path.isNotEmpty) right.initPath(left.path);
+      // Seed the right pane from the left only the first time dual pane is
+      // enabled this session; later toggles keep the right pane's path.
+      if (!_dualPaneUsedThisSession && left.path.isNotEmpty) {
+        right.initPath(left.path);
+      }
+      _dualPaneUsedThisSession = true;
       activePaneId = PaneId.left;
       dualPane = true;
     } else {
@@ -111,6 +117,14 @@ class AppController extends ChangeNotifier {
       dualPane = false;
     }
     notifyListeners();
+  }
+
+  Future<void> openNewWindow() async {
+    try {
+      await api.openNewWindow();
+    } catch (reason) {
+      activePane.setError(reason.toString());
+    }
   }
 
   void refreshActive() {
@@ -416,6 +430,10 @@ class AppController extends ChangeNotifier {
     }
     if (meta && event.logicalKey == LogicalKeyboardKey.keyA) {
       activePane.selectAll();
+      return KeyEventResult.handled;
+    }
+    if (meta && event.logicalKey == LogicalKeyboardKey.keyN) {
+      openNewWindow();
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.enter && selectedEntries.length == 1) {
