@@ -8,6 +8,7 @@ import 'folder_pane.dart';
 import 'machine_info_panel.dart';
 import 'notes_and_menu.dart';
 import 'sidebar.dart';
+import 'terminal_panel.dart';
 
 class AppShell extends StatelessWidget {
   const AppShell({super.key, required this.controller});
@@ -81,6 +82,8 @@ class AppShell extends StatelessWidget {
                                   ),
                           ),
                         ),
+                        if (controller.terminalOpen)
+                          TerminalPanel(controller: controller),
                         StatusBar(controller: controller),
                       ],
                     ),
