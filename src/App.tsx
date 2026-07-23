@@ -3,10 +3,10 @@ import {
   ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Clipboard, Copy, Download, Eye,
   File, FileArchive, FileCode2, FileImage, FileText, Folder, FolderOpen,
   Grid2X2, HardDrive, Home, Image, Info, List, Monitor, MoreHorizontal, Music,
-  Pencil, Plus, RefreshCw, Scissors, Search, Trash2, Video, ChevronRight,
+  Pencil, Plus, RefreshCw, Scissors, Search, StickyNote, Trash2, Video, ChevronRight,
 } from 'lucide-react'
 import './App.css'
-import type { FileEntry, Location } from './types'
+import type { FileEntry, ImprovementNote, Location } from './types'
 
 type SortKey = 'name' | 'modified' | 'type' | 'size'
 type ViewMode = 'list' | 'grid'
@@ -82,7 +82,14 @@ function App() {
   const [addressValue, setAddressValue] = useState('')
   const [renaming, setRenaming] = useState<string | null>(null)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; entry?: FileEntry } | null>(null)
+  const [notesOpen, setNotesOpen] = useState(false)
+  const [notes, setNotes] = useState<ImprovementNote[]>([])
+  const [noteDraft, setNoteDraft] = useState('')
+  const [includeFolder, setIncludeFolder] = useState(true)
+  const [notesError, setNotesError] = useState('')
+  const [savingNote, setSavingNote] = useState(false)
   const renameRef = useRef<HTMLInputElement>(null)
+  const noteInputRef = useRef<HTMLTextAreaElement>(null)
 
   const navigate = useCallback((targetPath: string) => {
     if (!targetPath || targetPath === currentPath) return
@@ -233,10 +240,58 @@ function App() {
     }
   }, [api, currentPath, refresh])
 
+  const loadNotes = useCallback(async () => {
+    if (!api) return
+    try {
+      setNotes(await api.listNotes())
+      setNotesError('')
+    } catch (reason) {
+      setNotesError(reason instanceof Error ? reason.message : String(reason))
+    }
+  }, [api])
+
+  useEffect(() => {
+    void loadNotes()
+  }, [loadNotes])
+
+  useEffect(() => {
+    if (!notesOpen) return
+    void loadNotes()
+    requestAnimationFrame(() => noteInputRef.current?.focus())
+  }, [notesOpen, loadNotes])
+
+  const submitNote = useCallback(async () => {
+    if (!api || !noteDraft.trim() || savingNote) return
+    setSavingNote(true)
+    try {
+      await api.addNote(noteDraft, includeFolder ? currentPath : null)
+      setNoteDraft('')
+      await loadNotes()
+    } catch (reason) {
+      setNotesError(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      setSavingNote(false)
+    }
+  }, [api, noteDraft, savingNote, includeFolder, currentPath, loadNotes])
+
+  const toggleNoteStatus = useCallback(async (note: ImprovementNote) => {
+    if (!api) return
+    try {
+      await api.setNoteStatus(note.id, note.status === 'open' ? 'done' : 'open')
+      await loadNotes()
+    } catch (reason) {
+      setNotesError(reason instanceof Error ? reason.message : String(reason))
+    }
+  }, [api, loadNotes])
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement
-      if (target.tagName === 'INPUT') return
+      if (event.key === 'Escape' && notesOpen) {
+        setNotesOpen(false)
+        return
+      }
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
       if (event.key === 'Backspace' && !event.metaKey) goBack()
       if ((event.key === 'Delete' || (event.metaKey && event.key === 'Backspace')) && selected.size) {
         event.preventDefault()
@@ -315,6 +370,8 @@ function App() {
   }
 
   const pathParts = currentPath.split('/').filter(Boolean)
+  const openNotes = notes.filter((note) => note.status === 'open')
+  const doneNotes = notes.filter((note) => note.status === 'done')
 
   return (
     <main
@@ -414,6 +471,10 @@ function App() {
           <button disabled={selected.size !== 1} title="Rename" onClick={() => selectedEntries[0] && setRenaming(selectedEntries[0].path)}><Pencil /></button>
           <button disabled={!selected.size} title="Move to Trash" onClick={() => void removeSelected()}><Trash2 /></button>
           <div className="command-spacer" />
+          <button className={notesOpen ? 'toggled' : ''} title="Improvement notes" onClick={(event) => {
+            event.stopPropagation()
+            setNotesOpen((value) => !value)
+          }}><StickyNote />{openNotes.length > 0 && <span className="notes-badge">{openNotes.length}</span>}</button>
           <button className={showHidden ? 'toggled' : ''} title={showHidden ? 'Hide hidden files' : 'Show hidden files'} onClick={() => setShowHidden((value) => !value)}><Eye /></button>
           <div className="view-switcher">
             <button className={view === 'list' ? 'active' : ''} onClick={() => setView('list')} title="Details view"><List /></button>
@@ -510,6 +571,82 @@ function App() {
               <button onClick={() => { refresh(); setContextMenu(null) }}><RefreshCw />Refresh</button>
             </>
           )}
+        </div>
+      )}
+
+      {notesOpen && (
+        <div className="notes-overlay" onClick={() => setNotesOpen(false)}>
+          <aside className="notes-panel" onClick={(event) => event.stopPropagation()}>
+            <header className="notes-header">
+              <div>
+                <h2>Improvement notes</h2>
+                <p>Capture ideas for Cursor to implement later.</p>
+              </div>
+              <button type="button" className="notes-close" onClick={() => setNotesOpen(false)} aria-label="Close notes">×</button>
+            </header>
+
+            <div className="notes-composer">
+              <textarea
+                ref={noteInputRef}
+                value={noteDraft}
+                onChange={(event) => setNoteDraft(event.target.value)}
+                placeholder="What should improve?"
+                rows={4}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                    event.preventDefault()
+                    void submitNote()
+                  }
+                }}
+              />
+              <label className="notes-folder-toggle">
+                <input type="checkbox" checked={includeFolder} onChange={(event) => setIncludeFolder(event.target.checked)} />
+                <span>Attach current folder</span>
+              </label>
+              {includeFolder && currentPath && <p className="notes-folder-path">{currentPath}</p>}
+              <button type="button" className="notes-submit" disabled={!noteDraft.trim() || savingNote} onClick={() => void submitNote()}>
+                {savingNote ? 'Saving…' : 'Add note'}
+              </button>
+            </div>
+
+            {notesError && <p className="notes-error">{notesError}</p>}
+
+            <section className="notes-section">
+              <h3>Open ({openNotes.length})</h3>
+              {openNotes.length === 0 ? (
+                <p className="notes-empty">No open notes.</p>
+              ) : (
+                <ul className="notes-list">
+                  {openNotes.map((note) => (
+                    <li key={note.id}>
+                      <button type="button" className="note-status" title="Mark done" onClick={() => void toggleNoteStatus(note)} aria-label="Mark done" />
+                      <div>
+                        <p>{note.body}</p>
+                        {note.folderPath && <span className="note-meta">{note.folderPath}</span>}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            {doneNotes.length > 0 && (
+              <section className="notes-section notes-done">
+                <h3>Done ({doneNotes.length})</h3>
+                <ul className="notes-list">
+                  {doneNotes.map((note) => (
+                    <li key={note.id} className="done">
+                      <button type="button" className="note-status checked" title="Reopen" onClick={() => void toggleNoteStatus(note)} aria-label="Reopen" />
+                      <div>
+                        <p>{note.body}</p>
+                        {note.folderPath && <span className="note-meta">{note.folderPath}</span>}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+          </aside>
         </div>
       )}
     </main>

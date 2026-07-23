@@ -13,4 +13,7 @@ contextBridge.exposeInMainWorld('explorer', {
   setClipboard: (paths, cut) => ipcRenderer.invoke('fs:setClipboard', paths, cut),
   getClipboard: () => ipcRenderer.invoke('fs:getClipboard'),
   paste: (path) => ipcRenderer.invoke('fs:paste', path),
+  listNotes: () => ipcRenderer.invoke('notes:list'),
+  addNote: (body, folderPath) => ipcRenderer.invoke('notes:add', body, folderPath),
+  setNoteStatus: (id, status) => ipcRenderer.invoke('notes:setStatus', id, status),
 })

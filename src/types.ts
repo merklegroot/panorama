@@ -14,6 +14,17 @@ export interface Location {
   icon: string
 }
 
+export type NoteStatus = 'open' | 'done'
+
+export interface ImprovementNote {
+  id: string
+  body: string
+  status: NoteStatus
+  createdAt: string
+  completedAt: string | null
+  folderPath: string | null
+}
+
 export interface ExplorerApi {
   getLocations(): Promise<Location[]>
   readDirectory(path: string, showHidden: boolean): Promise<FileEntry[]>
@@ -27,6 +38,9 @@ export interface ExplorerApi {
   setClipboard(paths: string[], cut: boolean): Promise<{ paths: string[]; cut: boolean }>
   getClipboard(): Promise<{ paths: string[]; cut: boolean }>
   paste(path: string): Promise<string[]>
+  listNotes(): Promise<ImprovementNote[]>
+  addNote(body: string, folderPath?: string | null): Promise<ImprovementNote>
+  setNoteStatus(id: string, status: NoteStatus): Promise<ImprovementNote>
 }
 
 declare global {

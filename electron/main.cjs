@@ -6,8 +6,25 @@ const path = require('node:path')
 app.setName('Panorama')
 
 const isDev = !app.isPackaged
+const notesPath = path.join(__dirname, '..', 'notes', 'improvements.json')
 let mainWindow
 let clipboard = { paths: [], cut: false }
+
+async function readNotesFile() {
+  try {
+    const raw = await fs.readFile(notesPath, 'utf8')
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed.notes) ? parsed : { notes: [] }
+  } catch (error) {
+    if (error && error.code === 'ENOENT') return { notes: [] }
+    throw error
+  }
+}
+
+async function writeNotesFile(data) {
+  await fs.mkdir(path.dirname(notesPath), { recursive: true })
+  await fs.writeFile(notesPath, `${JSON.stringify(data, null, 2)}\n`, 'utf8')
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -144,6 +161,39 @@ function registerIpc() {
     }
     if (clipboard.cut) clipboard = { paths: [], cut: false }
     return pasted
+  })
+
+  ipcMain.handle('notes:list', async () => {
+    const data = await readNotesFile()
+    return data.notes
+  })
+
+  ipcMain.handle('notes:add', async (_event, body, folderPath = null) => {
+    const text = typeof body === 'string' ? body.trim() : ''
+    if (!text) throw new Error('Note text is required.')
+    const data = await readNotesFile()
+    const note = {
+      id: `note_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+      body: text,
+      status: 'open',
+      createdAt: new Date().toISOString(),
+      completedAt: null,
+      folderPath: typeof folderPath === 'string' && folderPath ? folderPath : null,
+    }
+    data.notes.unshift(note)
+    await writeNotesFile(data)
+    return note
+  })
+
+  ipcMain.handle('notes:setStatus', async (_event, id, status) => {
+    if (status !== 'open' && status !== 'done') throw new Error('Status must be open or done.')
+    const data = await readNotesFile()
+    const note = data.notes.find((item) => item.id === id)
+    if (!note) throw new Error('Note not found.')
+    note.status = status
+    note.completedAt = status === 'done' ? new Date().toISOString() : null
+    await writeNotesFile(data)
+    return note
   })
 }
 
