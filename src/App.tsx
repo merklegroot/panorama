@@ -91,6 +91,11 @@ function App() {
   const renameRef = useRef<HTMLInputElement>(null)
   const noteInputRef = useRef<HTMLTextAreaElement>(null)
 
+  const openNotesPanel = useCallback(() => {
+    setDoneNotesExpanded(false)
+    setNotesOpen(true)
+  }, [])
+
   const navigate = useCallback((targetPath: string) => {
     if (!targetPath || targetPath === currentPath) return
     const nextHistory = history.slice(0, historyIndex + 1)
@@ -473,7 +478,8 @@ function App() {
           <div className="command-spacer" />
           <button className={notesOpen ? 'toggled' : ''} title="Notes" onClick={(event) => {
             event.stopPropagation()
-            setNotesOpen((value) => !value)
+            if (notesOpen) setNotesOpen(false)
+            else openNotesPanel()
           }}><StickyNote />{openNotes.length > 0 && <span className="notes-badge">{openNotes.length}</span>}</button>
           <button className={showHidden ? 'toggled' : ''} title={showHidden ? 'Hide hidden files' : 'Show hidden files'} onClick={() => setShowHidden((value) => !value)}><Eye /></button>
           <div className="view-switcher">
