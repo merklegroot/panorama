@@ -5,6 +5,7 @@ import '../app_controller.dart';
 import '../folder_pane_controller.dart';
 import 'chrome.dart';
 import 'folder_pane.dart';
+import 'machine_info_panel.dart';
 import 'notes_and_menu.dart';
 import 'sidebar.dart';
 
@@ -27,7 +28,8 @@ class AppShell extends StatelessWidget {
             if (context != null) {
               final editable = context.findAncestorWidgetOfExactType<EditableText>();
               if (editable != null) {
-                if (event.logicalKey == LogicalKeyboardKey.escape && controller.notesOpen) {
+                if (event.logicalKey == LogicalKeyboardKey.escape &&
+                    (controller.notesOpen || controller.machineInfoOpen)) {
                   return controller.handleKeyEvent(event);
                 }
                 return KeyEventResult.ignored;
@@ -86,6 +88,7 @@ class AppShell extends StatelessWidget {
                 ],
               ),
               if (controller.notesOpen) NotesPanel(controller: controller),
+              if (controller.machineInfoOpen) MachineInfoPanel(controller: controller),
               ExplorerContextMenu(controller: controller),
             ],
           ),

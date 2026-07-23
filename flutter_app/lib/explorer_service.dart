@@ -208,6 +208,167 @@ function run() {
     return entries;
   }
 
+  Future<DiskUsage?> getDiskUsage(String path) async {
+    if (path.isEmpty) return null;
+    try {
+      if (Platform.isWindows) {
+        final drive = p.split(p.normalize(path)).first;
+        final result = await Process.run('powershell', [
+          '-NoProfile',
+          '-Command',
+          "(Get-PSDrive -Name '${drive.replaceAll(':', '')}').Free; (Get-PSDrive -Name '${drive.replaceAll(':', '')}').Used",
+        ]);
+        if (result.exitCode != 0) return null;
+        final lines = (result.stdout as String)
+            .trim()
+            .split(RegExp(r'\s+'))
+            .where((l) => l.isNotEmpty)
+            .toList();
+        if (lines.length < 2) return null;
+        final free = int.tryParse(lines[0]) ?? 0;
+        final used = int.tryParse(lines[1]) ?? 0;
+        return DiskUsage(totalBytes: free + used, freeBytes: free, mountPoint: drive);
+      }
+
+      final result = await Process.run('df', ['-k', '-P', path]);
+      if (result.exitCode != 0) return null;
+      final lines = (result.stdout as String).trim().split('\n');
+      if (lines.length < 2) return null;
+      final parts = lines.last.trim().split(RegExp(r'\s+'));
+      if (parts.length < 6) return null;
+      final totalKb = int.tryParse(parts[1]) ?? 0;
+      final availableKb = int.tryParse(parts[3]) ?? 0;
+      return DiskUsage(
+        totalBytes: totalKb * 1024,
+        freeBytes: availableKb * 1024,
+        mountPoint: parts[5],
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<MachineInfo> getMachineInfo() async {
+    final hostname = Platform.localHostname;
+    final username = Platform.environment['USER'] ??
+        Platform.environment['USERNAME'] ??
+        '';
+
+    if (Platform.isMacOS) {
+      final swVers = await Process.run('sw_vers', []);
+      final lines = (swVers.stdout as String).split('\n');
+      String productName = 'macOS';
+      String productVersion = '';
+      for (final line in lines) {
+        if (line.startsWith('ProductName:')) {
+          productName = line.split(':').skip(1).join(':').trim();
+        } else if (line.startsWith('ProductVersion:')) {
+          productVersion = line.split(':').skip(1).join(':').trim();
+        }
+      }
+      final arch = (await Process.run('uname', ['-m'])).stdout.toString().trim();
+      final cpu = (await Process.run('sysctl', ['-n', 'machdep.cpu.brand_string']))
+          .stdout
+          .toString()
+          .trim();
+      final memRaw =
+          (await Process.run('sysctl', ['-n', 'hw.memsize'])).stdout.toString().trim();
+      final memoryBytes = int.tryParse(memRaw) ?? 0;
+      return MachineInfo(
+        hostname: hostname,
+        osName: productName,
+        osVersion: productVersion,
+        arch: arch,
+        cpu: cpu.isEmpty ? 'Unknown' : cpu,
+        memoryBytes: memoryBytes,
+        username: username,
+      );
+    }
+
+    if (Platform.isWindows) {
+      final os = (await Process.run('cmd', ['/c', 'ver'])).stdout.toString().trim();
+      final arch = Platform.environment['PROCESSOR_ARCHITECTURE'] ?? '';
+      final cpu = Platform.environment['PROCESSOR_IDENTIFIER'] ?? arch;
+      return MachineInfo(
+        hostname: hostname,
+        osName: 'Windows',
+        osVersion: os,
+        arch: arch,
+        cpu: cpu,
+        memoryBytes: 0,
+        username: username,
+      );
+    }
+
+    final uname = (await Process.run('uname', ['-sr'])).stdout.toString().trim();
+    final arch = (await Process.run('uname', ['-m'])).stdout.toString().trim();
+    var cpu = '';
+    try {
+      final cpuinfo = await File('/proc/cpuinfo').readAsString();
+      final model = cpuinfo
+          .split('\n')
+          .firstWhere((l) => l.startsWith('model name'), orElse: () => '');
+      if (model.contains(':')) cpu = model.split(':').skip(1).join(':').trim();
+    } catch (_) {}
+    var memoryBytes = 0;
+    try {
+      final meminfo = await File('/proc/meminfo').readAsString();
+      final total = meminfo
+          .split('\n')
+          .firstWhere((l) => l.startsWith('MemTotal:'), orElse: () => '');
+      final kb = int.tryParse(total.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+      memoryBytes = kb * 1024;
+    } catch (_) {}
+    return MachineInfo(
+      hostname: hostname,
+      osName: uname.split(' ').first,
+      osVersion: uname.split(' ').skip(1).join(' '),
+      arch: arch,
+      cpu: cpu.isEmpty ? arch : cpu,
+      memoryBytes: memoryBytes,
+      username: username,
+    );
+  }
+
+  Future<void> openTerminal(String directoryPath) async {
+    final dir = directoryPath.isEmpty ? (Platform.environment['HOME'] ?? '.') : directoryPath;
+    if (Platform.isMacOS) {
+      final result = await Process.run('open', ['-a', 'Terminal', dir]);
+      if (result.exitCode != 0) {
+        throw Exception((result.stderr as String).trim().isEmpty
+            ? 'Could not open Terminal.'
+            : (result.stderr as String).trim());
+      }
+      return;
+    }
+    if (Platform.isWindows) {
+      await Process.start(
+        'cmd',
+        ['/c', 'start', 'cmd.exe', '/k', 'cd /d $dir'],
+        mode: ProcessStartMode.detached,
+      );
+      return;
+    }
+    for (final candidate in [
+      ['gnome-terminal', ['--working-directory=$dir']],
+      ['konsole', ['--workdir', dir]],
+      ['xfce4-terminal', ['--working-directory=$dir']],
+      ['x-terminal-emulator', []],
+    ]) {
+      final exe = candidate[0] as String;
+      final args = candidate[1] as List<String>;
+      try {
+        final which = await Process.run('which', [exe]);
+        if (which.exitCode != 0) continue;
+        await Process.start(exe, args, workingDirectory: dir, mode: ProcessStartMode.detached);
+        return;
+      } catch (_) {
+        continue;
+      }
+    }
+    throw Exception('No terminal emulator found.');
+  }
+
   Future<void> openNewWindow() async {
     if (Platform.isMacOS) {
       final exe = Platform.resolvedExecutable;

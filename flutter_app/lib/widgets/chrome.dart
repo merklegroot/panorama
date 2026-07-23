@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app_controller.dart';
+import '../explorer_service.dart';
 import '../folder_pane_controller.dart';
 import '../theme.dart';
 import 'address_path_field.dart';
@@ -50,6 +51,17 @@ class CommandBar extends StatelessWidget {
           ),
           _Tb(icon: Icons.delete_outline, tip: 'Move to Trash', enabled: hasSelection, onPressed: controller.removeSelected),
           const Spacer(),
+          _Tb(
+            icon: Icons.terminal,
+            tip: 'Open Terminal Here',
+            onPressed: controller.openTerminalHere,
+          ),
+          _Tb(
+            icon: Icons.memory_outlined,
+            tip: 'System info',
+            toggled: controller.machineInfoOpen,
+            onPressed: controller.toggleMachineInfo,
+          ),
           _Tb(
             icon: Icons.sticky_note_2_outlined,
             tip: 'Notes',
@@ -258,6 +270,7 @@ class StatusBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pane = controller.activePane;
+    final disk = controller.diskUsage;
     return Container(
       height: 28,
       padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -285,6 +298,13 @@ class StatusBar extends StatelessWidget {
             ),
           ],
           const Spacer(),
+          if (disk != null) ...[
+            Text(
+              '${formatSize(disk.freeBytes, false)} free of ${formatSize(disk.totalBytes, false)}',
+              style: const TextStyle(fontSize: 11, color: PanoramaColors.muted),
+            ),
+            const Text('  •  ', style: TextStyle(fontSize: 11, color: PanoramaColors.muted)),
+          ],
           Flexible(
             child: Text(
               pane.path,

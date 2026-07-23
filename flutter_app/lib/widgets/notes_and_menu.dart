@@ -305,6 +305,7 @@ class ExplorerContextMenu extends StatelessWidget {
 
     return Positioned.fill(
       child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: controller.hideContextMenu,
         onSecondaryTap: controller.hideContextMenu,
         child: Stack(
@@ -342,6 +343,10 @@ class ExplorerContextMenu extends StatelessWidget {
           controller.openEntryIn(pane, entry);
           controller.hideContextMenu();
         }),
+        if (entry.isDirectory)
+          _item(Icons.terminal, 'Open Terminal Here', () {
+            controller.openTerminalHere();
+          }),
         if (!entry.isDirectory) ...[
           _submenuOpenWith(entry),
           _item(Icons.search, 'Show in Finder', () {
@@ -429,6 +434,9 @@ class ExplorerContextMenu extends StatelessWidget {
         _item(Icons.create_new_folder_outlined, 'New folder', () {
           controller.createFolder();
           controller.hideContextMenu();
+        }),
+        _item(Icons.terminal, 'Open Terminal Here', () {
+          controller.openTerminalHere();
         }),
         _item(Icons.content_paste, 'Paste', () {
           controller.paste();

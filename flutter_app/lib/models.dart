@@ -112,3 +112,37 @@ class ClipboardState {
   final List<String> paths;
   final bool cut;
 }
+
+class DiskUsage {
+  const DiskUsage({
+    required this.totalBytes,
+    required this.freeBytes,
+    required this.mountPoint,
+  });
+
+  final int totalBytes;
+  final int freeBytes;
+  final String mountPoint;
+
+  int get usedBytes => totalBytes - freeBytes;
+}
+
+class MachineInfo {
+  const MachineInfo({
+    required this.hostname,
+    required this.osName,
+    required this.osVersion,
+    required this.arch,
+    required this.cpu,
+    required this.memoryBytes,
+    required this.username,
+  });
+
+  final String hostname;
+  final String osName;
+  final String osVersion;
+  final String arch;
+  final String cpu;
+  final int memoryBytes;
+  final String username;
+}

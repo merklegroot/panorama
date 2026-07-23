@@ -37,6 +37,12 @@ class AppController extends ChangeNotifier {
   List<OpenWithApp> openWithApps = [];
   bool openWithLoading = false;
   bool _dualPaneUsedThisSession = false;
+  bool machineInfoOpen = false;
+  MachineInfo? machineInfo;
+  bool machineInfoLoading = false;
+  String machineInfoError = '';
+  DiskUsage? diskUsage;
+  String _diskUsageForPath = '';
 
   FolderPaneController get activePane =>
       activePaneId == PaneId.left ? left : right;
@@ -54,8 +60,8 @@ class AppController extends ChangeNotifier {
       notes.where((n) => n.status == NoteStatus.done).toList();
 
   Future<void> init() async {
-    left.addListener(notifyListeners);
-    right.addListener(notifyListeners);
+    left.addListener(_onPaneChanged);
+    right.addListener(_onPaneChanged);
     try {
       locations = await api.getLocations();
       final initial =
@@ -70,10 +76,15 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _onPaneChanged() {
+    notifyListeners();
+    refreshDiskUsage();
+  }
+
   @override
   void dispose() {
-    left.removeListener(notifyListeners);
-    right.removeListener(notifyListeners);
+    left.removeListener(_onPaneChanged);
+    right.removeListener(_onPaneChanged);
     left.dispose();
     right.dispose();
     super.dispose();
@@ -83,6 +94,7 @@ class AppController extends ChangeNotifier {
     if (activePaneId == id) return;
     activePaneId = id;
     notifyListeners();
+    refreshDiskUsage();
   }
 
   void setSidebarWidth(double width) {
@@ -124,6 +136,64 @@ class AppController extends ChangeNotifier {
       await api.openNewWindow();
     } catch (reason) {
       activePane.setError(reason.toString());
+    }
+  }
+
+  Future<void> openTerminalHere() async {
+    hideContextMenu();
+    try {
+      final selected = selectedEntries;
+      final directory = selected.length == 1 && selected.first.isDirectory
+          ? selected.first.path
+          : activePane.path;
+      await api.openTerminal(directory);
+    } catch (reason) {
+      activePane.setError(reason.toString());
+    }
+  }
+
+  Future<void> refreshDiskUsage() async {
+    final path = activePane.path;
+    if (path.isEmpty || path == _diskUsageForPath) return;
+    _diskUsageForPath = path;
+    try {
+      final usage = await api.getDiskUsage(path);
+      if (_diskUsageForPath != path) return;
+      diskUsage = usage;
+    } catch (_) {
+      if (_diskUsageForPath != path) return;
+      diskUsage = null;
+    }
+    notifyListeners();
+  }
+
+  Future<void> openMachineInfo() async {
+    closeNotesPanel();
+    machineInfoOpen = true;
+    machineInfoLoading = true;
+    machineInfoError = '';
+    notifyListeners();
+    try {
+      machineInfo = await api.getMachineInfo();
+    } catch (reason) {
+      machineInfoError = reason.toString();
+    } finally {
+      machineInfoLoading = false;
+      notifyListeners();
+    }
+  }
+
+  void closeMachineInfo() {
+    if (!machineInfoOpen) return;
+    machineInfoOpen = false;
+    notifyListeners();
+  }
+
+  void toggleMachineInfo() {
+    if (machineInfoOpen) {
+      closeMachineInfo();
+    } else {
+      openMachineInfo();
     }
   }
 
@@ -230,6 +300,7 @@ class AppController extends ChangeNotifier {
   }
 
   void openNotesPanel() {
+    closeMachineInfo();
     doneNotesExpanded = false;
     notesOpen = true;
     notifyListeners();
@@ -386,13 +457,23 @@ class AppController extends ChangeNotifier {
     final meta = HardwareKeyboard.instance.isMetaPressed ||
         HardwareKeyboard.instance.isControlPressed;
 
-    if (event.logicalKey == LogicalKeyboardKey.escape && notesOpen) {
-      if (editingNoteId != null) {
-        cancelEditNote();
-      } else {
-        closeNotesPanel();
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      if (contextMenuPosition != null) {
+        hideContextMenu();
+        return KeyEventResult.handled;
       }
-      return KeyEventResult.handled;
+      if (machineInfoOpen) {
+        closeMachineInfo();
+        return KeyEventResult.handled;
+      }
+      if (notesOpen) {
+        if (editingNoteId != null) {
+          cancelEditNote();
+        } else {
+          closeNotesPanel();
+        }
+        return KeyEventResult.handled;
+      }
     }
 
     if (event.logicalKey == LogicalKeyboardKey.tab && dualPane) {
