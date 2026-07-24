@@ -48,6 +48,23 @@ File: `notes/improvements.json`
    - leave `id`, `body`, `createdAt`, and `folderPath` unchanged
 6. **Write** the updated JSON back (pretty-printed, 2-space indent, trailing newline).
 7. **Summarize** what you implemented and which note ids were marked done.
+8. **Suggest a commit message** at the end of your reply (see below). Do not create the commit unless the user asks.
+
+## Suggested commit message
+
+After summarizing, always end with a suggested commit message for the work just done:
+
+- One short subject line (imperative mood, ~50–72 chars), focused on *why* / the user-facing outcome
+- Optional 1–2 sentence body only if the subject alone is ambiguous
+- Cover all notes implemented in this pass (not one message per note unless they are unrelated)
+- Format it in a fenced `text` block so it’s easy to copy
+
+Example ending:
+
+```text
+Add terminal collapse and confirm before deleting notes
+
+```
 
 ## Rules
 
@@ -56,6 +73,7 @@ File: `notes/improvements.json`
 - If a note is obsolete or already done in the code, still mark it `"done"` and say why.
 - Keep unrelated notes untouched.
 - Do not invent notes or edit note `body` text unless the user asks.
+- Do not create a git commit unless the user explicitly asks; only suggest the message.
 
 ## Example status update
 

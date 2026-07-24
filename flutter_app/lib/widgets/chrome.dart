@@ -52,22 +52,6 @@ class CommandBar extends StatelessWidget {
           _Tb(icon: Icons.delete_outline, tip: 'Move to Trash', enabled: hasSelection, onPressed: controller.removeSelected),
           const Spacer(),
           _Tb(
-            icon: Icons.terminal,
-            tip: !controller.terminalOpen
-                ? 'Terminal'
-                : controller.terminalCollapsed
-                    ? 'Expand terminal'
-                    : 'Close terminal',
-            toggled: controller.terminalOpen,
-            onPressed: () {
-              if (controller.terminalOpen && controller.terminalCollapsed) {
-                controller.setTerminalCollapsed(false);
-              } else {
-                controller.toggleTerminalPanel();
-              }
-            },
-          ),
-          _Tb(
             icon: Icons.memory_outlined,
             tip: 'System info',
             toggled: controller.machineInfoOpen,
@@ -283,13 +267,30 @@ class StatusBar extends StatelessWidget {
     final pane = controller.activePane;
     final disk = controller.diskUsage;
     return Container(
-      height: 28,
-      padding: const EdgeInsets.symmetric(horizontal: 14),
+      height: 32,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: const BoxDecoration(
         border: Border(top: BorderSide(color: PanoramaColors.line)),
       ),
       child: Row(
         children: [
+          _Tb(
+            icon: Icons.terminal,
+            tip: !controller.terminalOpen
+                ? 'Terminal'
+                : controller.terminalCollapsed
+                    ? 'Expand terminal'
+                    : 'Close terminal',
+            toggled: controller.terminalOpen,
+            onPressed: () {
+              if (controller.terminalOpen && controller.terminalCollapsed) {
+                controller.setTerminalCollapsed(false);
+              } else {
+                controller.toggleTerminalPanel();
+              }
+            },
+          ),
+          const SizedBox(width: 4),
           Text(
             '${pane.visibleEntries.length} ${pane.visibleEntries.length == 1 ? 'item' : 'items'}',
             style: const TextStyle(fontSize: 11, color: PanoramaColors.muted),
@@ -324,6 +325,7 @@ class StatusBar extends StatelessWidget {
               textAlign: TextAlign.right,
             ),
           ),
+          const SizedBox(width: 6),
         ],
       ),
     );
