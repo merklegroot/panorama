@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 
 import 'explorer_service.dart';
@@ -19,6 +21,7 @@ class FolderPaneController extends ChangeNotifier {
   List<String> history = [];
   int historyIndex = -1;
   Set<String> selected = {};
+  String? selectionAnchorPath;
   String search = '';
   SortKey sortKey = SortKey.name;
   bool sortAscending = true;
@@ -60,6 +63,7 @@ class FolderPaneController extends ChangeNotifier {
     history = [initialPath];
     historyIndex = 0;
     selected = {};
+    selectionAnchorPath = null;
     search = '';
     error = '';
     notifyListeners();
@@ -72,6 +76,7 @@ class FolderPaneController extends ChangeNotifier {
     historyIndex = history.length - 1;
     path = targetPath;
     selected = {};
+    selectionAnchorPath = null;
     search = '';
     error = '';
     notifyListeners();
@@ -154,10 +159,31 @@ class FolderPaneController extends ChangeNotifier {
 
   void setSelected(Set<String> value) {
     selected = value;
+    if (value.isEmpty) selectionAnchorPath = null;
     notifyListeners();
   }
 
-  void chooseEntry(FileEntry entry, {required bool additive}) {
+  void chooseEntry(
+    FileEntry entry, {
+    required bool additive,
+    bool range = false,
+  }) {
+    final list = visibleEntries;
+    final index = list.indexWhere((e) => e.path == entry.path);
+
+    if (range && selectionAnchorPath != null && index >= 0) {
+      final anchor = list.indexWhere((e) => e.path == selectionAnchorPath);
+      if (anchor >= 0) {
+        final start = math.min(anchor, index);
+        final end = math.max(anchor, index);
+        selected = {
+          for (var i = start; i <= end; i++) list[i].path,
+        };
+        notifyListeners();
+        return;
+      }
+    }
+
     if (additive) {
       final next = {...selected};
       if (next.contains(entry.path)) {
@@ -169,6 +195,7 @@ class FolderPaneController extends ChangeNotifier {
     } else {
       selected = {entry.path};
     }
+    selectionAnchorPath = entry.path;
     notifyListeners();
   }
 
@@ -179,6 +206,8 @@ class FolderPaneController extends ChangeNotifier {
 
   void selectAll() {
     selected = visibleEntries.map((e) => e.path).toSet();
+    selectionAnchorPath =
+        visibleEntries.isEmpty ? null : visibleEntries.first.path;
     notifyListeners();
   }
 }

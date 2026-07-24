@@ -4,6 +4,7 @@ import 'package:window_manager/window_manager.dart';
 import 'app_controller.dart';
 import 'explorer_service.dart';
 import 'theme.dart';
+import 'widgets/about_dialog.dart';
 import 'widgets/app_shell.dart';
 
 Future<void> main() async {
@@ -45,8 +46,17 @@ class PanoramaApp extends StatelessWidget {
       title: 'Panorama',
       debugShowCheckedModeBanner: false,
       theme: buildPanoramaTheme(),
-      home: Scaffold(
-        body: AppShell(controller: controller),
+      home: Builder(
+        builder: (context) {
+          final shell = Scaffold(
+            body: AppShell(controller: controller),
+          );
+          if (!isDesktop) return shell;
+          return AboutMenuListener(
+            onAbout: () => showPanoramaAbout(context),
+            child: shell,
+          );
+        },
       ),
     );
   }

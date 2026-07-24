@@ -335,10 +335,13 @@ class _FolderPaneViewState extends State<FolderPaneView> {
                 leading: _leadingIcon(entry, grid: false),
                 onTap: (event) {
                   app.setActivePane(widget.paneId);
+                  final shift = HardwareKeyboard.instance.isShiftPressed;
+                  final meta = HardwareKeyboard.instance.isMetaPressed ||
+                      HardwareKeyboard.instance.isControlPressed;
                   pane.chooseEntry(
                     entry,
-                    additive: HardwareKeyboard.instance.isMetaPressed ||
-                        HardwareKeyboard.instance.isControlPressed,
+                    additive: meta && !shift,
+                    range: shift,
                   );
                 },
                 onDoubleTap: () => app.openEntryIn(pane, entry),
@@ -403,10 +406,13 @@ class _FolderPaneViewState extends State<FolderPaneView> {
             borderRadius: BorderRadius.circular(8),
             onTap: () {
               app.setActivePane(widget.paneId);
+              final shift = HardwareKeyboard.instance.isShiftPressed;
+              final meta = HardwareKeyboard.instance.isMetaPressed ||
+                  HardwareKeyboard.instance.isControlPressed;
               pane.chooseEntry(
                 entry,
-                additive: HardwareKeyboard.instance.isMetaPressed ||
-                    HardwareKeyboard.instance.isControlPressed,
+                additive: meta && !shift,
+                range: shift,
               );
             },
             onDoubleTap: () => app.openEntryIn(pane, entry),
