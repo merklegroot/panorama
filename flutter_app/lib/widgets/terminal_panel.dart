@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -26,6 +27,7 @@ class _TerminalPanelState extends State<TerminalPanel> {
   int _startedSession = -1;
   int _lastCwdSync = -1;
   String? _error;
+  Timer? _cwdPoll;
 
   AppController get app => widget.controller;
 
@@ -48,11 +50,14 @@ class _TerminalPanelState extends State<TerminalPanel> {
 
   @override
   void dispose() {
+    _cwdPoll?.cancel();
     _killPty();
     super.dispose();
   }
 
   void _killPty() {
+    _cwdPoll?.cancel();
+    _cwdPoll = null;
     final pty = _pty;
     _pty = null;
     if (pty == null) return;
@@ -99,6 +104,7 @@ class _TerminalPanelState extends State<TerminalPanel> {
 
       pty.exitCode.then((code) {
         if (!mounted || _pty != pty) return;
+        _cwdPoll?.cancel();
         _terminal.write('\r\n[process exited: $code]\r\n');
       });
 
@@ -110,11 +116,59 @@ class _TerminalPanelState extends State<TerminalPanel> {
         _pty?.resize(h, w);
       };
 
+      _cwdPoll = Timer.periodic(const Duration(milliseconds: 800), (_) {
+        _pollShellCwd();
+      });
+
       if (mounted) setState(() {});
     } catch (reason) {
       if (!mounted) return;
       setState(() => _error = reason.toString());
     }
+  }
+
+  Future<void> _pollShellCwd() async {
+    final pty = _pty;
+    if (pty == null || !mounted) return;
+    final cwd = await _readProcessCwd(pty.pid);
+    if (!mounted || _pty != pty || cwd == null || cwd.isEmpty) return;
+    if (cwd == _cwd) return;
+    _cwd = cwd;
+    app.syncMainPaneFromTerminal(cwd);
+    if (mounted) setState(() {});
+  }
+
+  Future<String?> _readProcessCwd(int pid) async {
+    try {
+      if (Platform.isLinux) {
+        final link = await Link('/proc/$pid/cwd').resolveSymbolicLinks();
+        return link;
+      }
+      if (Platform.isMacOS) {
+        final result = await Process.run('lsof', [
+          '-a',
+          '-p',
+          '$pid',
+          '-d',
+          'cwd',
+          '-Fn',
+        ]);
+        if (result.exitCode != 0) return null;
+        for (final line in (result.stdout as String).split('\n')) {
+          if (line.startsWith('n') && line.length > 1) {
+            return line.substring(1);
+          }
+        }
+        return null;
+      }
+      if (Platform.isWindows) {
+        // ConPTY cwd reverse-sync is not supported yet.
+        return null;
+      }
+    } catch (_) {
+      return null;
+    }
+    return null;
   }
 
   void _syncCwdIfNeeded() {
@@ -147,12 +201,13 @@ class _TerminalPanelState extends State<TerminalPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final collapsed = app.terminalCollapsed;
     final pathLabel = app.terminalWorkingDirectory.isEmpty
         ? 'Terminal'
         : app.terminalWorkingDirectory;
 
     return Container(
-      height: 240,
+      height: collapsed ? 32 : 240,
       decoration: const BoxDecoration(
         color: Color(0xFF1B1F24),
         border: Border(top: BorderSide(color: PanoramaColors.line)),
@@ -160,58 +215,83 @@ class _TerminalPanelState extends State<TerminalPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            height: 32,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
+          Material(
             color: const Color(0xFF242A31),
-            child: Row(
-              children: [
-                const Icon(Icons.terminal, size: 14, color: Color(0xFF9AA4B2)),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    pathLabel,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12, color: Color(0xFF9AA4B2)),
+            child: SizedBox(
+              height: 32,
+              child: Row(
+                children: [
+                  InkWell(
+                    onTap: app.toggleTerminalCollapsed,
+                    child: const SizedBox(
+                      width: 32,
+                      height: 32,
+                      child: Icon(Icons.terminal, size: 14, color: Color(0xFF9AA4B2)),
+                    ),
                   ),
-                ),
-                IconButton(
-                  tooltip: 'Restart shell',
-                  visualDensity: VisualDensity.compact,
-                  onPressed: app.restartTerminalPanel,
-                  icon: const Icon(Icons.refresh, size: 16, color: Color(0xFF9AA4B2)),
-                ),
-                IconButton(
-                  tooltip: 'Close terminal',
-                  visualDensity: VisualDensity.compact,
-                  onPressed: app.closeTerminalPanel,
-                  icon: const Icon(Icons.close, size: 16, color: Color(0xFF9AA4B2)),
-                ),
-              ],
+                  Expanded(
+                    child: InkWell(
+                      onTap: app.toggleTerminalCollapsed,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          pathLabel,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 12, color: Color(0xFF9AA4B2)),
+                        ),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: collapsed ? 'Expand terminal' : 'Collapse terminal',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: app.toggleTerminalCollapsed,
+                    icon: Icon(
+                      collapsed ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                      size: 18,
+                      color: const Color(0xFF9AA4B2),
+                    ),
+                  ),
+                  if (!collapsed)
+                    IconButton(
+                      tooltip: 'Restart shell',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: app.restartTerminalPanel,
+                      icon: const Icon(Icons.refresh, size: 16, color: Color(0xFF9AA4B2)),
+                    ),
+                  IconButton(
+                    tooltip: 'Close terminal',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: app.closeTerminalPanel,
+                    icon: const Icon(Icons.close, size: 16, color: Color(0xFF9AA4B2)),
+                  ),
+                ],
+              ),
             ),
           ),
-          Expanded(
-            child: _error != null
-                ? Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Text(
-                      _error!,
-                      style: const TextStyle(color: Color(0xFFFF8A80), fontSize: 12),
+          if (!collapsed)
+            Expanded(
+              child: _error != null
+                  ? Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Text(
+                        _error!,
+                        style: const TextStyle(color: Color(0xFFFF8A80), fontSize: 12),
+                      ),
+                    )
+                  : TerminalView(
+                      _terminal,
+                      controller: _terminalController,
+                      autofocus: true,
+                      backgroundOpacity: 0,
+                      theme: TerminalThemes.defaultTheme,
+                      textStyle: const TerminalStyle(
+                        fontSize: 12,
+                        fontFamily: 'Menlo',
+                        fontFamilyFallback: ['Monaco', 'Consolas', 'Courier New', 'monospace'],
+                      ),
                     ),
-                  )
-                : TerminalView(
-                    _terminal,
-                    controller: _terminalController,
-                    autofocus: true,
-                    backgroundOpacity: 0,
-                    theme: TerminalThemes.defaultTheme,
-                    textStyle: const TerminalStyle(
-                      fontSize: 12,
-                      fontFamily: 'Menlo',
-                      fontFamilyFallback: ['Monaco', 'Consolas', 'Courier New', 'monospace'],
-                    ),
-                  ),
-          ),
+            ),
         ],
       ),
     );

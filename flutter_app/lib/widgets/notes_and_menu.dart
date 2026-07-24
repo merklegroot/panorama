@@ -239,12 +239,44 @@ class _NotesPanelState extends State<NotesPanel> {
           ),
           IconButton(
             tooltip: 'Delete note',
-            onPressed: () => app.deleteNote(note),
+            onPressed: () => _confirmDeleteNote(note),
             icon: const Icon(Icons.delete_outline, size: 18, color: PanoramaColors.muted),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _confirmDeleteNote(ImprovementNote note) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Delete note?'),
+          content: Text(
+            note.body.trim().isEmpty
+                ? 'This note will be permanently deleted.'
+                : 'Delete this note?\n\n“${note.body.trim()}”',
+            maxLines: 8,
+            overflow: TextOverflow.ellipsis,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: FilledButton.styleFrom(backgroundColor: PanoramaColors.danger),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed == true) {
+      await app.deleteNote(note);
+    }
   }
 
   Widget _editForm(ImprovementNote note) {

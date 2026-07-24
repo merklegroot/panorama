@@ -44,6 +44,7 @@ class AppController extends ChangeNotifier {
   DiskUsage? diskUsage;
   String _diskUsageForPath = '';
   bool terminalOpen = false;
+  bool terminalCollapsed = false;
   String terminalWorkingDirectory = '';
   int terminalSession = 0;
   int terminalCwdSync = 0;
@@ -93,6 +94,25 @@ class AppController extends ChangeNotifier {
     if (dir.isEmpty || dir == terminalWorkingDirectory) return;
     terminalWorkingDirectory = dir;
     terminalCwdSync += 1;
+  }
+
+  /// Called when the shell's cwd changes so the main pane can follow.
+  void syncMainPaneFromTerminal(String directory) {
+    if (directory.isEmpty || directory == left.path) return;
+    terminalWorkingDirectory = directory;
+    left.navigate(directory);
+  }
+
+  void toggleTerminalCollapsed() {
+    if (!terminalOpen) return;
+    terminalCollapsed = !terminalCollapsed;
+    notifyListeners();
+  }
+
+  void setTerminalCollapsed(bool value) {
+    if (!terminalOpen || terminalCollapsed == value) return;
+    terminalCollapsed = value;
+    notifyListeners();
   }
 
   @override
@@ -168,13 +188,18 @@ class AppController extends ChangeNotifier {
   void openTerminalPanel({String? directory, bool restart = false}) {
     final dir = (directory == null || directory.isEmpty) ? left.path : directory;
     if (terminalOpen && terminalWorkingDirectory == dir && !restart) {
-      notifyListeners();
+      if (terminalCollapsed) {
+        terminalCollapsed = false;
+        notifyListeners();
+      }
       return;
     }
     final needsNewSession =
         restart || !terminalOpen || terminalWorkingDirectory != dir;
+    final opening = !terminalOpen;
     terminalWorkingDirectory = dir;
     terminalOpen = true;
+    if (opening) terminalCollapsed = false;
     if (needsNewSession) {
       terminalSession += 1;
     }
