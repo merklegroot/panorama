@@ -34,8 +34,20 @@ class FolderPaneController extends ChangeNotifier {
   /// Selection is separate from content so row highlights can update without
   /// rebuilding the file list.
   final ValueNotifier<Set<String>> selection = ValueNotifier<Set<String>>(const {});
+  final Map<String, Set<VoidCallback>> _selectionPathListeners = {};
 
   Set<String> get selected => selection.value;
+
+  void addSelectionListener(String path, VoidCallback listener) {
+    (_selectionPathListeners[path] ??= <VoidCallback>{}).add(listener);
+  }
+
+  void removeSelectionListener(String path, VoidCallback listener) {
+    final listeners = _selectionPathListeners[path];
+    if (listeners == null) return;
+    listeners.remove(listener);
+    if (listeners.isEmpty) _selectionPathListeners.remove(path);
+  }
 
   List<FileEntry> get visibleEntries => _visibleCache ??= _computeVisible();
 
@@ -70,8 +82,33 @@ class FolderPaneController extends ChangeNotifier {
     } else if (anchor != null) {
       selectionAnchorPath = anchor;
     }
-    if (setEquals(selection.value, next)) return;
-    selection.value = next;
+    final previous = selection.value;
+    if (setEquals(previous, next)) return;
+
+    final frozen = Set<String>.unmodifiable(next);
+    selection.value = frozen;
+
+    // Only rows whose membership flipped need to rebuild.
+    for (final path in previous) {
+      if (!frozen.contains(path)) {
+        final listeners = _selectionPathListeners[path];
+        if (listeners != null) {
+          for (final listener in List<VoidCallback>.from(listeners)) {
+            listener();
+          }
+        }
+      }
+    }
+    for (final path in frozen) {
+      if (!previous.contains(path)) {
+        final listeners = _selectionPathListeners[path];
+        if (listeners != null) {
+          for (final listener in List<VoidCallback>.from(listeners)) {
+            listener();
+          }
+        }
+      }
+    }
   }
 
   void setShowHidden(bool value) {

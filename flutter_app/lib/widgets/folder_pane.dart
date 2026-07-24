@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:desktop_drop/desktop_drop.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -311,41 +311,6 @@ class _FolderPaneViewState extends State<FolderPaneView> {
 
   Widget _buildList() {
     final entries = pane.visibleEntries;
-    final list = ListView.builder(
-      itemExtent: 32,
-      itemCount: entries.length,
-      itemBuilder: (context, index) {
-        final entry = entries[index];
-        return _FileRow(
-          key: ValueKey(entry.path),
-          entry: entry,
-          renaming: app.renaming == entry.path,
-          leading: _leadingIcon(entry, grid: false),
-          onSelect: () {
-            app.setActivePane(widget.paneId);
-            final shift = HardwareKeyboard.instance.isShiftPressed;
-            final meta = HardwareKeyboard.instance.isMetaPressed ||
-                HardwareKeyboard.instance.isControlPressed;
-            pane.chooseEntry(
-              entry,
-              additive: meta && !shift,
-              range: shift,
-            );
-          },
-          onOpen: () => app.openEntryIn(pane, entry),
-          onSecondaryTap: (pos) {
-            app.showContextMenu(
-              position: pos,
-              paneId: widget.paneId,
-              entry: entry,
-            );
-          },
-          onRenameSubmit: (name) => app.submitRename(entry, name),
-          onRenameCancel: app.cancelRename,
-        );
-      },
-    );
-
     return Column(
       children: [
         Container(
@@ -363,12 +328,40 @@ class _FolderPaneViewState extends State<FolderPaneView> {
           ),
         ),
         Expanded(
-          child: ValueListenableBuilder<Set<String>>(
-            valueListenable: pane.selection,
-            builder: (context, selected, child) {
-              return _SelectionScope(selected: selected, child: child!);
+          child: ListView.builder(
+            itemExtent: 32,
+            itemCount: entries.length,
+            itemBuilder: (context, index) {
+              final entry = entries[index];
+              return _FileRow(
+                key: ValueKey(entry.path),
+                entry: entry,
+                pane: pane,
+                renaming: app.renaming == entry.path,
+                leading: _leadingIcon(entry, grid: false),
+                onSelect: () {
+                  app.setActivePane(widget.paneId);
+                  final shift = HardwareKeyboard.instance.isShiftPressed;
+                  final meta = HardwareKeyboard.instance.isMetaPressed ||
+                      HardwareKeyboard.instance.isControlPressed;
+                  pane.chooseEntry(
+                    entry,
+                    additive: meta && !shift,
+                    range: shift,
+                  );
+                },
+                onOpen: () => app.openEntryIn(pane, entry),
+                onSecondaryTap: (pos) {
+                  app.showContextMenu(
+                    position: pos,
+                    paneId: widget.paneId,
+                    entry: entry,
+                  );
+                },
+                onRenameSubmit: (name) => app.submitRename(entry, name),
+                onRenameCancel: app.cancelRename,
+              );
             },
-            child: list,
           ),
         ),
       ],
@@ -401,7 +394,7 @@ class _FolderPaneViewState extends State<FolderPaneView> {
 
   Widget _buildGrid() {
     final entries = pane.visibleEntries;
-    final grid = GridView.builder(
+    return GridView.builder(
       padding: const EdgeInsets.all(12),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 120,
@@ -415,6 +408,7 @@ class _FolderPaneViewState extends State<FolderPaneView> {
         return _GridTile(
           key: ValueKey(entry.path),
           entry: entry,
+          pane: pane,
           leading: _leadingIcon(entry, grid: true),
           onSelect: () {
             app.setActivePane(widget.paneId);
@@ -438,53 +432,14 @@ class _FolderPaneViewState extends State<FolderPaneView> {
         );
       },
     );
-
-    return ValueListenableBuilder<Set<String>>(
-      valueListenable: pane.selection,
-      builder: (context, selected, child) {
-        return _SelectionScope(selected: selected, child: child!);
-      },
-      child: grid,
-    );
   }
 }
 
-class _SelectionScope extends InheritedModel<String> {
-  const _SelectionScope({
-    required this.selected,
-    required super.child,
-  });
-
-  final Set<String> selected;
-
-  static bool isSelected(BuildContext context, String path) {
-    final scope = InheritedModel.inheritFrom<_SelectionScope>(context, aspect: path);
-    return scope?.selected.contains(path) ?? false;
-  }
-
-  @override
-  bool updateShouldNotify(_SelectionScope oldWidget) {
-    return !setEquals(selected, oldWidget.selected);
-  }
-
-  @override
-  bool updateShouldNotifyDependent(
-    _SelectionScope oldWidget,
-    Set<String> dependencies,
-  ) {
-    for (final path in dependencies) {
-      if (oldWidget.selected.contains(path) != selected.contains(path)) {
-        return true;
-      }
-    }
-    return false;
-  }
-}
-
-class _FileRow extends StatelessWidget {
+class _FileRow extends StatefulWidget {
   const _FileRow({
     super.key,
     required this.entry,
+    required this.pane,
     required this.renaming,
     required this.leading,
     required this.onSelect,
@@ -495,6 +450,7 @@ class _FileRow extends StatelessWidget {
   });
 
   final FileEntry entry;
+  final FolderPaneController pane;
   final bool renaming;
   final Widget leading;
   final VoidCallback onSelect;
@@ -503,72 +459,116 @@ class _FileRow extends StatelessWidget {
   final void Function(String) onRenameSubmit;
   final VoidCallback onRenameCancel;
 
+  ValueNotifier<Set<String>> get selection => pane.selection;
+
+  @override
+  State<_FileRow> createState() => _FileRowState();
+}
+
+class _FileRowState extends State<_FileRow> {
+  late bool _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = widget.selection.value.contains(widget.entry.path);
+    widget.pane.addSelectionListener(widget.entry.path, _onSelectionChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant _FileRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.entry.path != widget.entry.path || oldWidget.pane != widget.pane) {
+      oldWidget.pane.removeSelectionListener(oldWidget.entry.path, _onSelectionChanged);
+      widget.pane.addSelectionListener(widget.entry.path, _onSelectionChanged);
+      _selected = widget.selection.value.contains(widget.entry.path);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.pane.removeSelectionListener(widget.entry.path, _onSelectionChanged);
+    super.dispose();
+  }
+
+  void _onSelectionChanged() {
+    final next = widget.selection.value.contains(widget.entry.path);
+    if (next == _selected || !mounted) return;
+    setState(() => _selected = next);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final selected = _SelectionScope.isSelected(context, entry.path);
     return ColoredBox(
-      color: selected ? PanoramaColors.selected : Colors.transparent,
-      child: GestureDetector(
+      color: _selected ? PanoramaColors.selected : Colors.transparent,
+      child: Listener(
         behavior: HitTestBehavior.opaque,
-        // Select immediately on press. Using onTap together with onDoubleTap
-        // waits for the double-tap timeout (~300ms+) before selection fires.
-        onTapDown: (_) => onSelect(),
-        onDoubleTap: onOpen,
-        onSecondaryTapUp: (details) => onSecondaryTap(details.globalPosition),
-        child: SizedBox(
-          height: 32,
-          child: Row(
-            children: [
-              Expanded(
-                flex: 4,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  child: Row(
-                    children: [
-                      leading,
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: renaming
-                            ? _RenameField(
-                                initial: entry.name,
-                                onSubmit: onRenameSubmit,
-                                onCancel: onRenameCancel,
-                              )
-                            : Text(
-                                entry.name,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: 13),
-                              ),
-                      ),
-                    ],
+        onPointerDown: (event) {
+          if (event.buttons & kPrimaryButton != 0) {
+            widget.onSelect();
+          }
+        },
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          // Claim the tap so the parent "clear selection" handler doesn't run.
+          onTap: () {},
+          onDoubleTap: widget.onOpen,
+          onSecondaryTapUp: (details) => widget.onSecondaryTap(details.globalPosition),
+          child: SizedBox(
+            height: 32,
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 4,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: Row(
+                      children: [
+                        widget.leading,
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: widget.renaming
+                              ? _RenameField(
+                                  initial: widget.entry.name,
+                                  onSubmit: widget.onRenameSubmit,
+                                  onCancel: widget.onRenameCancel,
+                                )
+                              : Text(
+                                  widget.entry.name,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              Expanded(
-                flex: 3,
-                child: Text(
-                  formatModified(entry.modified),
-                  style: const TextStyle(fontSize: 12, color: PanoramaColors.muted),
-                  overflow: TextOverflow.ellipsis,
+                Expanded(
+                  flex: 3,
+                  child: Text(
+                    formatModified(widget.entry.modified),
+                    style: const TextStyle(fontSize: 12, color: PanoramaColors.muted),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Text(
-                  entry.fileType,
-                  style: const TextStyle(fontSize: 12, color: PanoramaColors.muted),
-                  overflow: TextOverflow.ellipsis,
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    widget.entry.fileType,
+                    style: const TextStyle(fontSize: 12, color: PanoramaColors.muted),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              ),
-              Expanded(
-                flex: 1,
-                child: Text(
-                  formatSize(entry.size, entry.isDirectory),
-                  style: const TextStyle(fontSize: 12, color: PanoramaColors.muted),
-                  overflow: TextOverflow.ellipsis,
+                Expanded(
+                  flex: 1,
+                  child: Text(
+                    formatSize(widget.entry.size, widget.entry.isDirectory),
+                    style: const TextStyle(fontSize: 12, color: PanoramaColors.muted),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -576,10 +576,11 @@ class _FileRow extends StatelessWidget {
   }
 }
 
-class _GridTile extends StatelessWidget {
+class _GridTile extends StatefulWidget {
   const _GridTile({
     super.key,
     required this.entry,
+    required this.pane,
     required this.leading,
     required this.onSelect,
     required this.onOpen,
@@ -587,35 +588,81 @@ class _GridTile extends StatelessWidget {
   });
 
   final FileEntry entry;
+  final FolderPaneController pane;
   final Widget leading;
   final VoidCallback onSelect;
   final VoidCallback onOpen;
   final void Function(Offset) onSecondaryTap;
 
+  ValueNotifier<Set<String>> get selection => pane.selection;
+
+  @override
+  State<_GridTile> createState() => _GridTileState();
+}
+
+class _GridTileState extends State<_GridTile> {
+  late bool _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = widget.selection.value.contains(widget.entry.path);
+    widget.pane.addSelectionListener(widget.entry.path, _onSelectionChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant _GridTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.entry.path != widget.entry.path || oldWidget.pane != widget.pane) {
+      oldWidget.pane.removeSelectionListener(oldWidget.entry.path, _onSelectionChanged);
+      widget.pane.addSelectionListener(widget.entry.path, _onSelectionChanged);
+      _selected = widget.selection.value.contains(widget.entry.path);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.pane.removeSelectionListener(widget.entry.path, _onSelectionChanged);
+    super.dispose();
+  }
+
+  void _onSelectionChanged() {
+    final next = widget.selection.value.contains(widget.entry.path);
+    if (next == _selected || !mounted) return;
+    setState(() => _selected = next);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final selected = _SelectionScope.isSelected(context, entry.path);
-    return Material(
-      color: selected ? PanoramaColors.selected : Colors.transparent,
-      borderRadius: BorderRadius.circular(8),
-      child: GestureDetector(
+    return ColoredBox(
+      color: _selected ? PanoramaColors.selected : Colors.transparent,
+      child: Listener(
         behavior: HitTestBehavior.opaque,
-        onTapDown: (_) => onSelect(),
-        onDoubleTap: onOpen,
-        onSecondaryTapUp: (details) => onSecondaryTap(details.globalPosition),
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: Column(
-            children: [
-              Expanded(child: Center(child: leading)),
-              Text(
-                entry.name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 12),
-              ),
-            ],
+        onPointerDown: (event) {
+          if (event.buttons & kPrimaryButton != 0) {
+            widget.onSelect();
+          }
+        },
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          // Claim the tap so the parent "clear selection" handler doesn't run.
+          onTap: () {},
+          onDoubleTap: widget.onOpen,
+          onSecondaryTapUp: (details) => widget.onSecondaryTap(details.globalPosition),
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              children: [
+                Expanded(child: Center(child: widget.leading)),
+                Text(
+                  widget.entry.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ],
+            ),
           ),
         ),
       ),

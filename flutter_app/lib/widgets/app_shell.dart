@@ -55,13 +55,7 @@ class AppShell extends StatelessWidget {
                     child: Column(
                       children: [
                         TitleBar(controller: controller),
-                        ListenableBuilder(
-                          listenable: Listenable.merge([
-                            controller.left.selection,
-                            controller.right.selection,
-                          ]),
-                          builder: (context, _) => CommandBar(controller: controller),
-                        ),
+                        CommandBar(controller: controller),
                         Expanded(
                           child: Padding(
                             padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
@@ -101,8 +95,6 @@ class AppShell extends StatelessWidget {
                           listenable: Listenable.merge([
                             controller.left,
                             controller.right,
-                            controller.left.selection,
-                            controller.right.selection,
                           ]),
                           builder: (context, _) => StatusBar(controller: controller),
                         ),

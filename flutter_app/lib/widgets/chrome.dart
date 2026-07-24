@@ -13,10 +13,6 @@ class CommandBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pane = controller.activePane;
-    final hasSelection = pane.selected.isNotEmpty;
-    final singleSelection = pane.selected.length == 1;
-
     return Container(
       height: 44,
       padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -37,19 +33,36 @@ class CommandBar extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           const _VSep(),
-          _Tb(icon: Icons.content_cut, tip: 'Cut', enabled: hasSelection, onPressed: () => controller.copySelected(true)),
-          _Tb(icon: Icons.copy, tip: 'Copy', enabled: hasSelection, onPressed: () => controller.copySelected(false)),
-          _Tb(icon: Icons.content_paste, tip: 'Paste', onPressed: controller.paste),
-          _Tb(
-            icon: Icons.edit,
-            tip: 'Rename',
-            enabled: singleSelection,
-            onPressed: () {
-              final entry = controller.selectedEntries.firstOrNull;
-              if (entry != null) controller.startRename(entry.path);
+          ListenableBuilder(
+            listenable: Listenable.merge([
+              controller.left.selection,
+              controller.right.selection,
+              controller,
+            ]),
+            builder: (context, _) {
+              final pane = controller.activePane;
+              final hasSelection = pane.selected.isNotEmpty;
+              final singleSelection = pane.selected.length == 1;
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _Tb(icon: Icons.content_cut, tip: 'Cut', enabled: hasSelection, onPressed: () => controller.copySelected(true)),
+                  _Tb(icon: Icons.copy, tip: 'Copy', enabled: hasSelection, onPressed: () => controller.copySelected(false)),
+                  _Tb(icon: Icons.content_paste, tip: 'Paste', onPressed: controller.paste),
+                  _Tb(
+                    icon: Icons.edit,
+                    tip: 'Rename',
+                    enabled: singleSelection,
+                    onPressed: () {
+                      final entry = controller.selectedEntries.firstOrNull;
+                      if (entry != null) controller.startRename(entry.path);
+                    },
+                  ),
+                  _Tb(icon: Icons.delete_outline, tip: 'Move to Trash', enabled: hasSelection, onPressed: controller.removeSelected),
+                ],
+              );
             },
           ),
-          _Tb(icon: Icons.delete_outline, tip: 'Move to Trash', enabled: hasSelection, onPressed: controller.removeSelected),
           const Spacer(),
           _Tb(
             icon: Icons.memory_outlined,
@@ -299,13 +312,22 @@ class StatusBar extends StatelessWidget {
             '${pane.visibleEntries.length} ${pane.visibleEntries.length == 1 ? 'item' : 'items'}',
             style: const TextStyle(fontSize: 11, color: PanoramaColors.muted),
           ),
-          if (pane.selected.isNotEmpty) ...[
-            const Text('  •  ', style: TextStyle(fontSize: 11, color: PanoramaColors.muted)),
-            Text(
-              '${pane.selected.length} selected',
-              style: const TextStyle(fontSize: 11, color: PanoramaColors.muted),
-            ),
-          ],
+          ValueListenableBuilder<Set<String>>(
+            valueListenable: pane.selection,
+            builder: (context, selected, _) {
+              if (selected.isEmpty) return const SizedBox.shrink();
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('  •  ', style: TextStyle(fontSize: 11, color: PanoramaColors.muted)),
+                  Text(
+                    '${selected.length} selected',
+                    style: const TextStyle(fontSize: 11, color: PanoramaColors.muted),
+                  ),
+                ],
+              );
+            },
+          ),
           if (controller.dualPane) ...[
             const Text('  •  ', style: TextStyle(fontSize: 11, color: PanoramaColors.muted)),
             Text(
