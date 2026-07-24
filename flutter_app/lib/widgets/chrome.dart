@@ -279,14 +279,14 @@ class StatusBar extends StatelessWidget {
             tip: !controller.terminalOpen
                 ? 'Terminal'
                 : controller.terminalCollapsed
-                    ? 'Expand terminal'
-                    : 'Close terminal',
+                    ? 'Show terminal'
+                    : 'Hide terminal',
             toggled: controller.terminalOpen,
             onPressed: () {
-              if (controller.terminalOpen && controller.terminalCollapsed) {
-                controller.setTerminalCollapsed(false);
-              } else {
+              if (!controller.terminalOpen) {
                 controller.toggleTerminalPanel();
+              } else {
+                controller.setTerminalCollapsed(!controller.terminalCollapsed);
               }
             },
           ),

@@ -201,13 +201,17 @@ class _TerminalPanelState extends State<TerminalPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final collapsed = app.terminalCollapsed;
+    if (app.terminalCollapsed) {
+      // Keep State (and the PTY) alive while taking no layout space.
+      return const SizedBox.shrink();
+    }
+
     final pathLabel = app.terminalWorkingDirectory.isEmpty
         ? 'Terminal'
         : app.terminalWorkingDirectory;
 
     return Container(
-      height: collapsed ? 32 : 240,
+      height: 240,
       decoration: const BoxDecoration(
         color: Color(0xFF1B1F24),
         border: Border(top: BorderSide(color: PanoramaColors.line)),
@@ -221,44 +225,32 @@ class _TerminalPanelState extends State<TerminalPanel> {
               height: 32,
               child: Row(
                 children: [
-                  InkWell(
-                    onTap: app.toggleTerminalCollapsed,
-                    child: const SizedBox(
-                      width: 32,
-                      height: 32,
-                      child: Icon(Icons.terminal, size: 14, color: Color(0xFF9AA4B2)),
-                    ),
-                  ),
+                  const SizedBox(width: 10),
+                  const Icon(Icons.terminal, size: 14, color: Color(0xFF9AA4B2)),
+                  const SizedBox(width: 8),
                   Expanded(
-                    child: InkWell(
-                      onTap: app.toggleTerminalCollapsed,
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          pathLabel,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 12, color: Color(0xFF9AA4B2)),
-                        ),
-                      ),
+                    child: Text(
+                      pathLabel,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF9AA4B2)),
                     ),
                   ),
                   IconButton(
-                    tooltip: collapsed ? 'Expand terminal' : 'Collapse terminal',
+                    tooltip: 'Hide terminal',
                     visualDensity: VisualDensity.compact,
-                    onPressed: app.toggleTerminalCollapsed,
-                    icon: Icon(
-                      collapsed ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                    onPressed: () => app.setTerminalCollapsed(true),
+                    icon: const Icon(
+                      Icons.keyboard_arrow_down,
                       size: 18,
-                      color: const Color(0xFF9AA4B2),
+                      color: Color(0xFF9AA4B2),
                     ),
                   ),
-                  if (!collapsed)
-                    IconButton(
-                      tooltip: 'Restart shell',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: app.restartTerminalPanel,
-                      icon: const Icon(Icons.refresh, size: 16, color: Color(0xFF9AA4B2)),
-                    ),
+                  IconButton(
+                    tooltip: 'Restart shell',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: app.restartTerminalPanel,
+                    icon: const Icon(Icons.refresh, size: 16, color: Color(0xFF9AA4B2)),
+                  ),
                   IconButton(
                     tooltip: 'Close terminal',
                     visualDensity: VisualDensity.compact,
@@ -269,29 +261,28 @@ class _TerminalPanelState extends State<TerminalPanel> {
               ),
             ),
           ),
-          if (!collapsed)
-            Expanded(
-              child: _error != null
-                  ? Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Text(
-                        _error!,
-                        style: const TextStyle(color: Color(0xFFFF8A80), fontSize: 12),
-                      ),
-                    )
-                  : TerminalView(
-                      _terminal,
-                      controller: _terminalController,
-                      autofocus: true,
-                      backgroundOpacity: 0,
-                      theme: TerminalThemes.defaultTheme,
-                      textStyle: const TerminalStyle(
-                        fontSize: 12,
-                        fontFamily: 'Menlo',
-                        fontFamilyFallback: ['Monaco', 'Consolas', 'Courier New', 'monospace'],
-                      ),
+          Expanded(
+            child: _error != null
+                ? Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Text(
+                      _error!,
+                      style: const TextStyle(color: Color(0xFFFF8A80), fontSize: 12),
                     ),
-            ),
+                  )
+                : TerminalView(
+                    _terminal,
+                    controller: _terminalController,
+                    autofocus: true,
+                    backgroundOpacity: 0,
+                    theme: TerminalThemes.defaultTheme,
+                    textStyle: const TerminalStyle(
+                      fontSize: 12,
+                      fontFamily: 'Menlo',
+                      fontFamilyFallback: ['Monaco', 'Consolas', 'Courier New', 'monospace'],
+                    ),
+                  ),
+          ),
         ],
       ),
     );
