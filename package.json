@@ -6,12 +6,15 @@
   "scripts": {
     "dev": "cd flutter_app && flutter run -d macos",
     "dev:linux": "cd flutter_app && flutter run -d linux",
+    "dev:windows": "cd flutter_app && flutter run -d windows",
     "start": "cd flutter_app && flutter run -d macos",
     "build": "cd flutter_app && flutter build macos",
     "build:linux": "cd flutter_app && flutter build linux --release",
+    "build:windows": "cd flutter_app && flutter build windows --release",
     "test": "cd flutter_app && flutter test",
     "analyze": "cd flutter_app && flutter analyze",
     "install:mac": "./scripts/install-mac.sh",
-    "package:deb": "./scripts/package-deb.sh"
+    "package:deb": "./scripts/package-deb.sh",
+    "package:windows": "powershell -File ./scripts/package-windows.ps1"
   }
 }

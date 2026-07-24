@@ -1,6 +1,6 @@
 # Panorama
 
-A respectable file explorer — Windows Explorer–inspired browsing for the desktop.
+A respectable file explorer
 
 ![Screenshot](img/screenshot.png)
 
@@ -10,6 +10,7 @@ A respectable file explorer — Windows Explorer–inspired browsing for the des
 npm run dev
 # or: cd flutter_app && flutter run -d macos
 # Linux: cd flutter_app && flutter run -d linux
+# Windows: cd flutter_app && flutter run -d windows
 ```
 
 ## Build
@@ -22,10 +23,14 @@ flutter build macos
 flutter build linux --release
 ../scripts/package-deb.sh 1.0.6
 # → release/Panorama-1.0.6-linux-amd64.deb
+
+flutter build windows --release
+# then on Windows:
+powershell -File ../scripts/package-windows.ps1 -Version 1.0.6
+# → release/Panorama-1.0.6-windows-x64-setup.exe
 ```
 
-Tagged releases publish a macOS `.zip` and a Linux `.deb` via GitHub Actions.
-
+Tagged releases publish a macOS `.zip`, Linux `.deb`, and Windows installer via GitHub Actions.
 ## Spotlight launcher (macOS)
 
 Install a `/Applications/Panorama.app` stub that opens the local Flutter build (so notes stay in this repo for Cursor):

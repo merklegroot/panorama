@@ -184,9 +184,63 @@ jobs:
           path: release/Panorama-*-linux-amd64.deb
           if-no-files-found: error
 
+  build-windows:
+    name: Build Windows (installer)
+    needs: prepare
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: flutter_app
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'master' || github.ref }}
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Sync pubspec version
+        shell: bash
+        run: |
+          sed -i.bak -E "s/^version:[[:space:]]*[0-9]+\.[0-9]+\.[0-9]+(\+[0-9]+)?/version: ${{ needs.prepare.outputs.version }}+1/" pubspec.yaml
+          rm -f pubspec.yaml.bak
+
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Windows
+        run: flutter build windows --release
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+          }
+
+      - name: Package installer
+        working-directory: .
+        shell: pwsh
+        run: |
+          .\scripts\package-windows.ps1 -Version "${{ needs.prepare.outputs.version }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Panorama-Windows
+          path: release/Panorama-*-windows-x64-setup.exe
+          if-no-files-found: error
+
   release:
     name: Create GitHub Release
-    needs: [prepare, build-macos, build-linux]
+    needs: [prepare, build-macos, build-linux, build-windows]
     runs-on: ubuntu-latest
     steps:
       - name: Download artifacts
@@ -215,4 +269,9 @@ jobs:
               ```
             - Or: `sudo dpkg -i Panorama-*-linux-amd64.deb`
             - Requires GTK 3 (Ubuntu/Debian desktop)
+
+            ### Windows
+            - Download **`Panorama-${{ needs.prepare.outputs.version }}-windows-x64-setup.exe`** and run it
+            - Installs per-user under `%LOCALAPPDATA%\Programs\Panorama` (no admin required)
+            - First launch may show a SmartScreen prompt for an unsigned build — choose **More info → Run anyway**
           files: dist/*
