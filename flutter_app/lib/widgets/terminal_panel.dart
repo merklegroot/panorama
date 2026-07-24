@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_pty/flutter_pty.dart';
@@ -21,8 +22,9 @@ class _TerminalPanelState extends State<TerminalPanel> {
   late final Terminal _terminal;
   late final TerminalController _terminalController;
   Pty? _pty;
-  String? _startedIn;
+  String? _cwd;
   int _startedSession = -1;
+  int _lastCwdSync = -1;
   String? _error;
 
   AppController get app => widget.controller;
@@ -41,6 +43,7 @@ class _TerminalPanelState extends State<TerminalPanel> {
   void didUpdateWidget(covariant TerminalPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     _ensureSession();
+    _syncCwdIfNeeded();
   }
 
   @override
@@ -66,11 +69,15 @@ class _TerminalPanelState extends State<TerminalPanel> {
   void _ensureSession() {
     final dir = app.terminalWorkingDirectory;
     final session = app.terminalSession;
-    if (_pty != null && _startedIn == dir && _startedSession == session) return;
+    if (_pty != null && _startedSession == session) {
+      _syncCwdIfNeeded();
+      return;
+    }
 
     _killPty();
-    _startedIn = dir;
+    _cwd = dir;
     _startedSession = session;
+    _lastCwdSync = app.terminalCwdSync;
     _error = null;
 
     try {
@@ -110,6 +117,34 @@ class _TerminalPanelState extends State<TerminalPanel> {
     }
   }
 
+  void _syncCwdIfNeeded() {
+    if (_pty == null) return;
+    if (app.terminalCwdSync == _lastCwdSync) return;
+    _lastCwdSync = app.terminalCwdSync;
+    final dir = app.terminalWorkingDirectory;
+    if (dir.isEmpty || dir == _cwd) {
+      _cwd = dir;
+      if (mounted) setState(() {});
+      return;
+    }
+    _cwd = dir;
+    _sendCd(dir);
+    if (mounted) setState(() {});
+  }
+
+  void _sendCd(String dir) {
+    final pty = _pty;
+    if (pty == null) return;
+    final command = Platform.isWindows
+        ? 'cd /d "${dir.replaceAll('"', '')}"\r\n'
+        : 'cd ${_shellEscape(dir)}\n';
+    pty.write(Uint8List.fromList(utf8.encode(command)));
+  }
+
+  String _shellEscape(String value) {
+    return "'${value.replaceAll("'", "'\\''")}'";
+  }
+
   @override
   Widget build(BuildContext context) {
     final pathLabel = app.terminalWorkingDirectory.isEmpty
@@ -143,9 +178,7 @@ class _TerminalPanelState extends State<TerminalPanel> {
                 IconButton(
                   tooltip: 'Restart shell',
                   visualDensity: VisualDensity.compact,
-                  onPressed: () {
-                    app.openTerminalPanel(app.terminalWorkingDirectory);
-                  },
+                  onPressed: app.restartTerminalPanel,
                   icon: const Icon(Icons.refresh, size: 16, color: Color(0xFF9AA4B2)),
                 ),
                 IconButton(

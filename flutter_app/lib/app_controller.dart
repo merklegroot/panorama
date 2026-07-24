@@ -46,6 +46,7 @@ class AppController extends ChangeNotifier {
   bool terminalOpen = false;
   String terminalWorkingDirectory = '';
   int terminalSession = 0;
+  int terminalCwdSync = 0;
 
   FolderPaneController get activePane =>
       activePaneId == PaneId.left ? left : right;
@@ -80,8 +81,18 @@ class AppController extends ChangeNotifier {
   }
 
   void _onPaneChanged() {
+    _syncTerminalToMainPane();
     notifyListeners();
     refreshDiskUsage();
+  }
+
+  /// Keep the embedded terminal cwd aligned with the main (left) pane only.
+  void _syncTerminalToMainPane() {
+    if (!terminalOpen) return;
+    final dir = left.path;
+    if (dir.isEmpty || dir == terminalWorkingDirectory) return;
+    terminalWorkingDirectory = dir;
+    terminalCwdSync += 1;
   }
 
   @override
@@ -143,23 +154,30 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> openTerminalHere() async {
+    final pane = contextMenuPane;
+    final entry = contextMenuEntry;
     hideContextMenu();
-    final selected = selectedEntries;
-    final directory = selected.length == 1 && selected.first.isDirectory
-        ? selected.first.path
-        : activePane.path;
-    openTerminalPanel(directory);
+    // Follow the main pane: if the folder was opened from the left pane
+    // context menu, navigate there first so terminal sync stays consistent.
+    if (pane == PaneId.left && entry != null && entry.isDirectory) {
+      left.navigate(entry.path);
+    }
+    openTerminalPanel(directory: left.path);
   }
 
-  void openTerminalPanel([String? directory]) {
-    final dir = (directory == null || directory.isEmpty) ? activePane.path : directory;
-    if (terminalOpen && terminalWorkingDirectory == dir) {
+  void openTerminalPanel({String? directory, bool restart = false}) {
+    final dir = (directory == null || directory.isEmpty) ? left.path : directory;
+    if (terminalOpen && terminalWorkingDirectory == dir && !restart) {
       notifyListeners();
       return;
     }
+    final needsNewSession =
+        restart || !terminalOpen || terminalWorkingDirectory != dir;
     terminalWorkingDirectory = dir;
     terminalOpen = true;
-    terminalSession += 1;
+    if (needsNewSession) {
+      terminalSession += 1;
+    }
     notifyListeners();
   }
 
@@ -173,8 +191,12 @@ class AppController extends ChangeNotifier {
     if (terminalOpen) {
       closeTerminalPanel();
     } else {
-      openTerminalPanel(activePane.path);
+      openTerminalPanel(directory: left.path);
     }
+  }
+
+  void restartTerminalPanel() {
+    openTerminalPanel(directory: left.path, restart: true);
   }
 
   Future<void> refreshDiskUsage() async {
