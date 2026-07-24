@@ -290,6 +290,10 @@ class StatusBar extends StatelessWidget {
               }
             },
           ),
+          if (controller.terminalOpen && controller.terminalCollapsed) ...[
+            const SizedBox(width: 4),
+            _TerminalRunningChip(controller: controller),
+          ],
           const SizedBox(width: 4),
           Text(
             '${pane.visibleEntries.length} ${pane.visibleEntries.length == 1 ? 'item' : 'items'}',
@@ -327,6 +331,60 @@ class StatusBar extends StatelessWidget {
           ),
           const SizedBox(width: 6),
         ],
+      ),
+    );
+  }
+}
+
+class _TerminalRunningChip extends StatelessWidget {
+  const _TerminalRunningChip({required this.controller});
+
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: PanoramaColors.blueSoft,
+      borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.only(left: 8, right: 2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 7,
+              height: 7,
+              decoration: const BoxDecoration(
+                color: Color(0xFF2E9B57),
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 6),
+            InkWell(
+              onTap: () => controller.setTerminalCollapsed(false),
+              borderRadius: BorderRadius.circular(4),
+              child: const Padding(
+                padding: EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                child: Text(
+                  'Terminal running',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: PanoramaColors.navActive,
+                  ),
+                ),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Kill terminal',
+              visualDensity: VisualDensity.compact,
+              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              padding: EdgeInsets.zero,
+              onPressed: controller.closeTerminalPanel,
+              icon: const Icon(Icons.close, size: 14, color: PanoramaColors.navActive),
+            ),
+          ],
+        ),
       ),
     );
   }
