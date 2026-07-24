@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Panorama
+Comment=Windows Explorer-inspired desktop file manager
+Exec=panorama
+Icon=panorama
+Terminal=false
+Categories=Utility;FileManager;System;
+StartupNotify=true
+StartupWMClass=com.panorama.panorama
+Keywords=files;folders;explorer;manager;

@@ -83,7 +83,7 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-  build:
+  build-macos:
     name: Build macOS
     needs: prepare
     runs-on: macos-latest
@@ -126,9 +126,67 @@ jobs:
           path: release/Panorama-*.zip
           if-no-files-found: error
 
+  build-linux:
+    name: Build Linux (.deb)
+    needs: prepare
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: flutter_app
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'master' || github.ref }}
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            clang cmake ninja-build pkg-config \
+            libgtk-3-dev liblzma-dev dpkg-dev
+          # clang needs matching libstdc++ headers (version varies by Ubuntu).
+          sudo apt-get install -y libstdc++-14-dev \
+            || sudo apt-get install -y libstdc++-12-dev \
+            || sudo apt-get install -y libstdc++-dev
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Sync pubspec version
+        run: |
+          sed -i.bak -E "s/^version:[[:space:]]*[0-9]+\.[0-9]+\.[0-9]+(\+[0-9]+)?/version: ${{ needs.prepare.outputs.version }}+1/" pubspec.yaml
+          rm -f pubspec.yaml.bak
+
+      - name: Enable Linux desktop
+        run: flutter config --enable-linux-desktop
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Linux
+        run: flutter build linux --release
+
+      - name: Package .deb
+        working-directory: .
+        run: |
+          ./scripts/package-deb.sh \
+            "${{ needs.prepare.outputs.version }}" \
+            flutter_app/build/linux/x64/release/bundle \
+            release
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Panorama-Linux
+          path: release/Panorama-*-linux-amd64.deb
+          if-no-files-found: error
+
   release:
     name: Create GitHub Release
-    needs: [prepare, build]
+    needs: [prepare, build-macos, build-linux]
     runs-on: ubuntu-latest
     steps:
       - name: Download artifacts
@@ -149,4 +207,12 @@ jobs:
             - Download the **`.zip`**, unzip it, and drag **Panorama.app** into **Applications**
             - First launch: **right-click → Open → Open** (unsigned build; one-time Gatekeeper prompt)
             - Or use the repo launcher: `./scripts/install-mac.sh` after building locally
+
+            ### Linux
+            - Download the **`.deb`** and install with:
+              ```bash
+              sudo apt install ./Panorama-${{ needs.prepare.outputs.version }}-linux-amd64.deb
+              ```
+            - Or: `sudo dpkg -i Panorama-*-linux-amd64.deb`
+            - Requires GTK 3 (Ubuntu/Debian desktop)
           files: dist/*

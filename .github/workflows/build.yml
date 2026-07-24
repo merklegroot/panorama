@@ -1,4 +1,4 @@
-name: Build macOS
+name: Build
 
 on:
   push:
@@ -8,14 +8,14 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: build-macos-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: build-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
 
 jobs:
-  build:
+  build-macos:
     name: Build macOS
     runs-on: macos-latest
     defaults:
@@ -54,4 +54,59 @@ jobs:
         with:
           name: Panorama-macOS
           path: release/Panorama-macOS.zip
+          if-no-files-found: error
+
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: flutter_app
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            clang cmake ninja-build pkg-config \
+            libgtk-3-dev liblzma-dev dpkg-dev
+          # clang needs matching libstdc++ headers (version varies by Ubuntu).
+          sudo apt-get install -y libstdc++-14-dev \
+            || sudo apt-get install -y libstdc++-12-dev \
+            || sudo apt-get install -y libstdc++-dev
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Enable Linux desktop
+        run: flutter config --enable-linux-desktop
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Build Linux
+        run: flutter build linux --release
+
+      - name: Package .deb
+        working-directory: .
+        run: |
+          ./scripts/package-deb.sh 0.0.0 \
+            flutter_app/build/linux/x64/release/bundle \
+            release
+
+      - name: Upload Linux .deb
+        uses: actions/upload-artifact@v4
+        with:
+          name: Panorama-Linux
+          path: release/Panorama-*-linux-amd64.deb
           if-no-files-found: error
