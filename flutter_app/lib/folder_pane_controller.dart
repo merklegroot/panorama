@@ -20,7 +20,6 @@ class FolderPaneController extends ChangeNotifier {
   List<FileEntry> entries = [];
   List<String> history = [];
   int historyIndex = -1;
-  Set<String> selected = {};
   String? selectionAnchorPath;
   String search = '';
   SortKey sortKey = SortKey.name;
@@ -30,8 +29,17 @@ class FolderPaneController extends ChangeNotifier {
   String error = '';
   int _refreshToken = 0;
   bool _showHidden = false;
+  List<FileEntry>? _visibleCache;
 
-  List<FileEntry> get visibleEntries {
+  /// Selection is separate from content so row highlights can update without
+  /// rebuilding the file list.
+  final ValueNotifier<Set<String>> selection = ValueNotifier<Set<String>>(const {});
+
+  Set<String> get selected => selection.value;
+
+  List<FileEntry> get visibleEntries => _visibleCache ??= _computeVisible();
+
+  List<FileEntry> _computeVisible() {
     final query = search.toLowerCase();
     final filtered = entries.where((entry) => entry.name.toLowerCase().contains(query)).toList()
       ..sort((a, b) {
@@ -52,6 +60,20 @@ class FolderPaneController extends ChangeNotifier {
     return filtered;
   }
 
+  void _invalidateVisible() {
+    _visibleCache = null;
+  }
+
+  void _setSelection(Set<String> next, {String? anchor, bool clearAnchor = false}) {
+    if (clearAnchor) {
+      selectionAnchorPath = null;
+    } else if (anchor != null) {
+      selectionAnchorPath = anchor;
+    }
+    if (setEquals(selection.value, next)) return;
+    selection.value = next;
+  }
+
   void setShowHidden(bool value) {
     if (_showHidden == value) return;
     _showHidden = value;
@@ -62,10 +84,10 @@ class FolderPaneController extends ChangeNotifier {
     path = initialPath;
     history = [initialPath];
     historyIndex = 0;
-    selected = {};
-    selectionAnchorPath = null;
+    _setSelection(const {}, clearAnchor: true);
     search = '';
     error = '';
+    _invalidateVisible();
     notifyListeners();
     refresh();
   }
@@ -75,10 +97,10 @@ class FolderPaneController extends ChangeNotifier {
     history = [...history.sublist(0, historyIndex + 1), targetPath];
     historyIndex = history.length - 1;
     path = targetPath;
-    selected = {};
-    selectionAnchorPath = null;
+    _setSelection(const {}, clearAnchor: true);
     search = '';
     error = '';
+    _invalidateVisible();
     notifyListeners();
     refresh();
   }
@@ -97,6 +119,7 @@ class FolderPaneController extends ChangeNotifier {
       final items = await _api.readDirectory(path, _showHidden);
       if (token != _refreshToken) return;
       entries = items;
+      _invalidateVisible();
     } catch (reason) {
       if (token != _refreshToken) return;
       error = reason.toString();
@@ -112,7 +135,8 @@ class FolderPaneController extends ChangeNotifier {
     if (historyIndex <= 0) return;
     historyIndex -= 1;
     path = history[historyIndex];
-    selected = {};
+    _setSelection(const {}, clearAnchor: true);
+    _invalidateVisible();
     notifyListeners();
     refresh();
   }
@@ -121,7 +145,8 @@ class FolderPaneController extends ChangeNotifier {
     if (historyIndex >= history.length - 1) return;
     historyIndex += 1;
     path = history[historyIndex];
-    selected = {};
+    _setSelection(const {}, clearAnchor: true);
+    _invalidateVisible();
     notifyListeners();
     refresh();
   }
@@ -139,6 +164,7 @@ class FolderPaneController extends ChangeNotifier {
 
   void setSearch(String value) {
     search = value;
+    _invalidateVisible();
     notifyListeners();
   }
 
@@ -149,6 +175,7 @@ class FolderPaneController extends ChangeNotifier {
       sortKey = key;
       sortAscending = true;
     }
+    _invalidateVisible();
     notifyListeners();
   }
 
@@ -158,9 +185,11 @@ class FolderPaneController extends ChangeNotifier {
   }
 
   void setSelected(Set<String> value) {
-    selected = value;
-    if (value.isEmpty) selectionAnchorPath = null;
-    notifyListeners();
+    _setSelection(
+      Set<String>.unmodifiable(value),
+      clearAnchor: value.isEmpty,
+      anchor: value.length == 1 ? value.first : null,
+    );
   }
 
   void chooseEntry(
@@ -168,6 +197,23 @@ class FolderPaneController extends ChangeNotifier {
     required bool additive,
     bool range = false,
   }) {
+    // Fast path: plain click — no need to scan the visible list.
+    if (!range && !additive) {
+      _setSelection({entry.path}, anchor: entry.path);
+      return;
+    }
+
+    if (additive && !range) {
+      final next = {...selection.value};
+      if (next.contains(entry.path)) {
+        next.remove(entry.path);
+      } else {
+        next.add(entry.path);
+      }
+      _setSelection(next, anchor: entry.path);
+      return;
+    }
+
     final list = visibleEntries;
     final index = list.indexWhere((e) => e.path == entry.path);
 
@@ -176,27 +222,14 @@ class FolderPaneController extends ChangeNotifier {
       if (anchor >= 0) {
         final start = math.min(anchor, index);
         final end = math.max(anchor, index);
-        selected = {
+        _setSelection({
           for (var i = start; i <= end; i++) list[i].path,
-        };
-        notifyListeners();
+        });
         return;
       }
     }
 
-    if (additive) {
-      final next = {...selected};
-      if (next.contains(entry.path)) {
-        next.remove(entry.path);
-      } else {
-        next.add(entry.path);
-      }
-      selected = next;
-    } else {
-      selected = {entry.path};
-    }
-    selectionAnchorPath = entry.path;
-    notifyListeners();
+    _setSelection({entry.path}, anchor: entry.path);
   }
 
   void setError(String message) {
@@ -205,9 +238,17 @@ class FolderPaneController extends ChangeNotifier {
   }
 
   void selectAll() {
-    selected = visibleEntries.map((e) => e.path).toSet();
-    selectionAnchorPath =
-        visibleEntries.isEmpty ? null : visibleEntries.first.path;
-    notifyListeners();
+    final list = visibleEntries;
+    _setSelection(
+      list.map((e) => e.path).toSet(),
+      anchor: list.isEmpty ? null : list.first.path,
+      clearAnchor: list.isEmpty,
+    );
+  }
+
+  @override
+  void dispose() {
+    selection.dispose();
+    super.dispose();
   }
 }

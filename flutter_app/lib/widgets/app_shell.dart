@@ -42,13 +42,26 @@ class AppShell extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Sidebar(controller: controller),
+                  ListenableBuilder(
+                    listenable: Listenable.merge([
+                      controller,
+                      controller.left,
+                      controller.right,
+                    ]),
+                    builder: (context, _) => Sidebar(controller: controller),
+                  ),
                   SidebarResizeHandle(controller: controller),
                   Expanded(
                     child: Column(
                       children: [
                         TitleBar(controller: controller),
-                        CommandBar(controller: controller),
+                        ListenableBuilder(
+                          listenable: Listenable.merge([
+                            controller.left.selection,
+                            controller.right.selection,
+                          ]),
+                          builder: (context, _) => CommandBar(controller: controller),
+                        ),
                         Expanded(
                           child: Padding(
                             padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
@@ -84,7 +97,15 @@ class AppShell extends StatelessWidget {
                         ),
                         if (controller.terminalOpen)
                           TerminalPanel(controller: controller),
-                        StatusBar(controller: controller),
+                        ListenableBuilder(
+                          listenable: Listenable.merge([
+                            controller.left,
+                            controller.right,
+                            controller.left.selection,
+                            controller.right.selection,
+                          ]),
+                          builder: (context, _) => StatusBar(controller: controller),
+                        ),
                       ],
                     ),
                   ),

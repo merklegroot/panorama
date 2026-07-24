@@ -116,7 +116,7 @@ class _TerminalPanelState extends State<TerminalPanel> {
         _pty?.resize(h, w);
       };
 
-      _cwdPoll = Timer.periodic(const Duration(milliseconds: 800), (_) {
+      _cwdPoll = Timer.periodic(const Duration(seconds: 2), (_) {
         _pollShellCwd();
       });
 

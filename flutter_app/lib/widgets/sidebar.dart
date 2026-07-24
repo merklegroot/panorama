@@ -114,12 +114,17 @@ class Sidebar extends StatelessWidget {
                 const Icon(Icons.info_outline, size: 14, color: PanoramaColors.muted),
                 const SizedBox(width: 7),
                 Expanded(
-                  child: Text(
-                    pane.selected.isNotEmpty
-                        ? '${pane.selected.length} selected'
-                        : '${pane.entries.length} items',
-                    style: const TextStyle(fontSize: 11, color: PanoramaColors.muted),
-                    overflow: TextOverflow.ellipsis,
+                  child: ValueListenableBuilder<Set<String>>(
+                    valueListenable: pane.selection,
+                    builder: (context, selected, _) {
+                      return Text(
+                        selected.isNotEmpty
+                            ? '${selected.length} selected'
+                            : '${pane.entries.length} items',
+                        style: const TextStyle(fontSize: 11, color: PanoramaColors.muted),
+                        overflow: TextOverflow.ellipsis,
+                      );
+                    },
                   ),
                 ),
               ],

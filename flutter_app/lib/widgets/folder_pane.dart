@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:desktop_drop/desktop_drop.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -86,10 +87,7 @@ class _FolderPaneViewState extends State<FolderPaneView> {
 
   Widget _leadingIcon(FileEntry entry, {required bool grid}) {
     final size = grid ? 48.0 : 20.0;
-    if (grid &&
-        !entry.isDirectory &&
-        imageExtensions.contains(entry.extension) &&
-        File(entry.path).existsSync()) {
+    if (grid && !entry.isDirectory && imageExtensions.contains(entry.extension)) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(4),
         child: Image.file(
@@ -97,6 +95,7 @@ class _FolderPaneViewState extends State<FolderPaneView> {
           width: size,
           height: size,
           fit: BoxFit.cover,
+          gaplessPlayback: true,
           errorBuilder: (_, error, stackTrace) => Icon(
             _fileIcon(entry),
             size: size,
@@ -114,38 +113,43 @@ class _FolderPaneViewState extends State<FolderPaneView> {
 
   @override
   Widget build(BuildContext context) {
-    final active = app.activePaneId == widget.paneId;
-    final pathParts = pane.path.split('/').where((p) => p.isNotEmpty).toList();
+    return ListenableBuilder(
+      listenable: pane,
+      builder: (context, _) {
+        final active = app.activePaneId == widget.paneId;
+        final pathParts = pane.path.split('/').where((p) => p.isNotEmpty).toList();
 
-    return DropTarget(
-      onDragEntered: (_) => setState(() => _dragOver = true),
-      onDragExited: (_) => setState(() => _dragOver = false),
-      onDragDone: (detail) {
-        setState(() => _dragOver = false);
-        app.setActivePane(widget.paneId);
-        final paths = detail.files.map((f) => f.path).where((p) => p.isNotEmpty).toList();
-        app.importExternalFiles(pane, paths);
-      },
-      child: GestureDetector(
-        onTap: () => app.setActivePane(widget.paneId),
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.55),
-            border: Border.all(
-              color: _dragOver
-                  ? PanoramaColors.blue
-                  : (active ? PanoramaColors.blue.withValues(alpha: 0.35) : PanoramaColors.line),
-              width: _dragOver || active ? 1.5 : 1,
+        return DropTarget(
+          onDragEntered: (_) => setState(() => _dragOver = true),
+          onDragExited: (_) => setState(() => _dragOver = false),
+          onDragDone: (detail) {
+            setState(() => _dragOver = false);
+            app.setActivePane(widget.paneId);
+            final paths = detail.files.map((f) => f.path).where((p) => p.isNotEmpty).toList();
+            app.importExternalFiles(pane, paths);
+          },
+          child: GestureDetector(
+            onTap: () => app.setActivePane(widget.paneId),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.55),
+                border: Border.all(
+                  color: _dragOver
+                      ? PanoramaColors.blue
+                      : (active ? PanoramaColors.blue.withValues(alpha: 0.35) : PanoramaColors.line),
+                  width: _dragOver || active ? 1.5 : 1,
+                ),
+              ),
+              child: Column(
+                children: [
+                  if (widget.showChrome) _buildChrome(pathParts),
+                  Expanded(child: _buildFileArea()),
+                ],
+              ),
             ),
           ),
-          child: Column(
-            children: [
-              if (widget.showChrome) _buildChrome(pathParts),
-              Expanded(child: _buildFileArea()),
-            ],
-          ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -306,6 +310,42 @@ class _FolderPaneViewState extends State<FolderPaneView> {
   }
 
   Widget _buildList() {
+    final entries = pane.visibleEntries;
+    final list = ListView.builder(
+      itemExtent: 32,
+      itemCount: entries.length,
+      itemBuilder: (context, index) {
+        final entry = entries[index];
+        return _FileRow(
+          key: ValueKey(entry.path),
+          entry: entry,
+          renaming: app.renaming == entry.path,
+          leading: _leadingIcon(entry, grid: false),
+          onSelect: () {
+            app.setActivePane(widget.paneId);
+            final shift = HardwareKeyboard.instance.isShiftPressed;
+            final meta = HardwareKeyboard.instance.isMetaPressed ||
+                HardwareKeyboard.instance.isControlPressed;
+            pane.chooseEntry(
+              entry,
+              additive: meta && !shift,
+              range: shift,
+            );
+          },
+          onOpen: () => app.openEntryIn(pane, entry),
+          onSecondaryTap: (pos) {
+            app.showContextMenu(
+              position: pos,
+              paneId: widget.paneId,
+              entry: entry,
+            );
+          },
+          onRenameSubmit: (name) => app.submitRename(entry, name),
+          onRenameCancel: app.cancelRename,
+        );
+      },
+    );
+
     return Column(
       children: [
         Container(
@@ -323,39 +363,12 @@ class _FolderPaneViewState extends State<FolderPaneView> {
           ),
         ),
         Expanded(
-          child: ListView.builder(
-            itemCount: pane.visibleEntries.length,
-            itemBuilder: (context, index) {
-              final entry = pane.visibleEntries[index];
-              final selected = pane.selected.contains(entry.path);
-              return _FileRow(
-                entry: entry,
-                selected: selected,
-                renaming: app.renaming == entry.path,
-                leading: _leadingIcon(entry, grid: false),
-                onTap: (event) {
-                  app.setActivePane(widget.paneId);
-                  final shift = HardwareKeyboard.instance.isShiftPressed;
-                  final meta = HardwareKeyboard.instance.isMetaPressed ||
-                      HardwareKeyboard.instance.isControlPressed;
-                  pane.chooseEntry(
-                    entry,
-                    additive: meta && !shift,
-                    range: shift,
-                  );
-                },
-                onDoubleTap: () => app.openEntryIn(pane, entry),
-                onSecondaryTap: (pos) {
-                  app.showContextMenu(
-                    position: pos,
-                    paneId: widget.paneId,
-                    entry: entry,
-                  );
-                },
-                onRenameSubmit: (name) => app.submitRename(entry, name),
-                onRenameCancel: app.cancelRename,
-              );
+          child: ValueListenableBuilder<Set<String>>(
+            valueListenable: pane.selection,
+            builder: (context, selected, child) {
+              return _SelectionScope(selected: selected, child: child!);
             },
+            child: list,
           ),
         ),
       ],
@@ -387,7 +400,8 @@ class _FolderPaneViewState extends State<FolderPaneView> {
   }
 
   Widget _buildGrid() {
-    return GridView.builder(
+    final entries = pane.visibleEntries;
+    final grid = GridView.builder(
       padding: const EdgeInsets.all(12),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 120,
@@ -395,87 +409,112 @@ class _FolderPaneViewState extends State<FolderPaneView> {
         crossAxisSpacing: 8,
         childAspectRatio: 0.85,
       ),
-      itemCount: pane.visibleEntries.length,
+      itemCount: entries.length,
       itemBuilder: (context, index) {
-        final entry = pane.visibleEntries[index];
-        final selected = pane.selected.contains(entry.path);
-        return Material(
-          color: selected ? PanoramaColors.selected : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(8),
-            onTap: () {
-              app.setActivePane(widget.paneId);
-              final shift = HardwareKeyboard.instance.isShiftPressed;
-              final meta = HardwareKeyboard.instance.isMetaPressed ||
-                  HardwareKeyboard.instance.isControlPressed;
-              pane.chooseEntry(
-                entry,
-                additive: meta && !shift,
-                range: shift,
-              );
-            },
-            onDoubleTap: () => app.openEntryIn(pane, entry),
-            onSecondaryTapDown: (d) {
-              app.showContextMenu(
-                position: d.globalPosition,
-                paneId: widget.paneId,
-                entry: entry,
-              );
-            },
-            child: Padding(
-              padding: const EdgeInsets.all(8),
-              child: Column(
-                children: [
-                  Expanded(child: Center(child: _leadingIcon(entry, grid: true))),
-                  Text(
-                    entry.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-          ),
+        final entry = entries[index];
+        return _GridTile(
+          key: ValueKey(entry.path),
+          entry: entry,
+          leading: _leadingIcon(entry, grid: true),
+          onSelect: () {
+            app.setActivePane(widget.paneId);
+            final shift = HardwareKeyboard.instance.isShiftPressed;
+            final meta = HardwareKeyboard.instance.isMetaPressed ||
+                HardwareKeyboard.instance.isControlPressed;
+            pane.chooseEntry(
+              entry,
+              additive: meta && !shift,
+              range: shift,
+            );
+          },
+          onOpen: () => app.openEntryIn(pane, entry),
+          onSecondaryTap: (pos) {
+            app.showContextMenu(
+              position: pos,
+              paneId: widget.paneId,
+              entry: entry,
+            );
+          },
         );
       },
     );
+
+    return ValueListenableBuilder<Set<String>>(
+      valueListenable: pane.selection,
+      builder: (context, selected, child) {
+        return _SelectionScope(selected: selected, child: child!);
+      },
+      child: grid,
+    );
+  }
+}
+
+class _SelectionScope extends InheritedModel<String> {
+  const _SelectionScope({
+    required this.selected,
+    required super.child,
+  });
+
+  final Set<String> selected;
+
+  static bool isSelected(BuildContext context, String path) {
+    final scope = InheritedModel.inheritFrom<_SelectionScope>(context, aspect: path);
+    return scope?.selected.contains(path) ?? false;
+  }
+
+  @override
+  bool updateShouldNotify(_SelectionScope oldWidget) {
+    return !setEquals(selected, oldWidget.selected);
+  }
+
+  @override
+  bool updateShouldNotifyDependent(
+    _SelectionScope oldWidget,
+    Set<String> dependencies,
+  ) {
+    for (final path in dependencies) {
+      if (oldWidget.selected.contains(path) != selected.contains(path)) {
+        return true;
+      }
+    }
+    return false;
   }
 }
 
 class _FileRow extends StatelessWidget {
   const _FileRow({
+    super.key,
     required this.entry,
-    required this.selected,
     required this.renaming,
     required this.leading,
-    required this.onTap,
-    required this.onDoubleTap,
+    required this.onSelect,
+    required this.onOpen,
     required this.onSecondaryTap,
     required this.onRenameSubmit,
     required this.onRenameCancel,
   });
 
   final FileEntry entry;
-  final bool selected;
   final bool renaming;
   final Widget leading;
-  final void Function(PointerDownEvent?) onTap;
-  final VoidCallback onDoubleTap;
+  final VoidCallback onSelect;
+  final VoidCallback onOpen;
   final void Function(Offset) onSecondaryTap;
   final void Function(String) onRenameSubmit;
   final VoidCallback onRenameCancel;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
+    final selected = _SelectionScope.isSelected(context, entry.path);
+    return ColoredBox(
       color: selected ? PanoramaColors.selected : Colors.transparent,
-      child: InkWell(
-        onTap: () => onTap(null),
-        onDoubleTap: onDoubleTap,
-        onSecondaryTapDown: (d) => onSecondaryTap(d.globalPosition),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        // Select immediately on press. Using onTap together with onDoubleTap
+        // waits for the double-tap timeout (~300ms+) before selection fires.
+        onTapDown: (_) => onSelect(),
+        onDoubleTap: onOpen,
+        onSecondaryTapUp: (details) => onSecondaryTap(details.globalPosition),
         child: SizedBox(
           height: 32,
           child: Row(
@@ -495,7 +534,11 @@ class _FileRow extends StatelessWidget {
                                 onSubmit: onRenameSubmit,
                                 onCancel: onRenameCancel,
                               )
-                            : Text(entry.name, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
+                            : Text(
+                                entry.name,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 13),
+                              ),
                       ),
                     ],
                   ),
@@ -524,6 +567,53 @@ class _FileRow extends StatelessWidget {
                   style: const TextStyle(fontSize: 12, color: PanoramaColors.muted),
                   overflow: TextOverflow.ellipsis,
                 ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GridTile extends StatelessWidget {
+  const _GridTile({
+    super.key,
+    required this.entry,
+    required this.leading,
+    required this.onSelect,
+    required this.onOpen,
+    required this.onSecondaryTap,
+  });
+
+  final FileEntry entry;
+  final Widget leading;
+  final VoidCallback onSelect;
+  final VoidCallback onOpen;
+  final void Function(Offset) onSecondaryTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = _SelectionScope.isSelected(context, entry.path);
+    return Material(
+      color: selected ? PanoramaColors.selected : Colors.transparent,
+      borderRadius: BorderRadius.circular(8),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => onSelect(),
+        onDoubleTap: onOpen,
+        onSecondaryTapUp: (details) => onSecondaryTap(details.globalPosition),
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Column(
+            children: [
+              Expanded(child: Center(child: leading)),
+              Text(
+                entry.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 12),
               ),
             ],
           ),
