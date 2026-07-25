@@ -161,10 +161,28 @@ jobs:
             || sudo apt-get install -y libstdc++-dev
 
       - name: Setup Flutter
+        if: matrix.deb_arch == 'amd64'
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
+
+      # Flutter does not publish linux-arm64 SDK zips on the stable channel that
+      # flutter-action can resolve, so clone the stable branch instead.
+      - name: Setup Flutter (arm64)
+        if: matrix.deb_arch == 'arm64'
+        run: |
+          git clone --depth 1 --branch stable https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+          echo "$RUNNER_TEMP/flutter/bin/cache/dart-sdk/bin" >> "$GITHUB_PATH"
+
+      - name: Bootstrap Flutter (arm64)
+        if: matrix.deb_arch == 'arm64'
+        working-directory: .
+        run: |
+          flutter config --no-analytics
+          flutter precache --linux
+          flutter doctor -v
 
       - name: Sync pubspec version
         run: |
