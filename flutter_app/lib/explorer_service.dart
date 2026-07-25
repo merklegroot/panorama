@@ -248,11 +248,155 @@ function run() {
     }
   }
 
+  Future<List<DiskVolume>> getDiskVolumes() async {
+    try {
+      if (Platform.isWindows) return _windowsDiskVolumes();
+      return _unixDiskVolumes();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<List<DiskVolume>> _windowsDiskVolumes() async {
+    final result = await Process.run('powershell', [
+      '-NoProfile',
+      '-Command',
+      r'''
+Get-CimInstance Win32_LogicalDisk |
+  Where-Object { $_.DriveType -in 2,3,4 -and $_.Size -gt 0 } |
+  ForEach-Object {
+    $name = if ([string]::IsNullOrWhiteSpace($_.VolumeName)) { '' } else { $_.VolumeName }
+    "{0}`t{1}`t{2}`t{3}" -f $_.DeviceID, $name, $_.Size, $_.FreeSpace
+  }
+''',
+    ]);
+    if (result.exitCode != 0) return const [];
+    final volumes = <DiskVolume>[];
+    for (final line in (result.stdout as String).split('\n')) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+      final parts = trimmed.split('\t');
+      if (parts.length < 4) continue;
+      final total = int.tryParse(parts[2]) ?? 0;
+      final free = int.tryParse(parts[3]) ?? 0;
+      if (total <= 0) continue;
+      volumes.add(DiskVolume(
+        mountPoint: parts[0],
+        label: parts[1],
+        device: parts[0],
+        totalBytes: total,
+        freeBytes: free.clamp(0, total),
+      ));
+    }
+    volumes.sort((a, b) => a.mountPoint.compareTo(b.mountPoint));
+    return volumes;
+  }
+
+  Future<List<DiskVolume>> _unixDiskVolumes() async {
+    final args = Platform.isMacOS
+        ? <String>['-k', '-l', '-P']
+        : <String>[
+            '-k',
+            '-P',
+            '-x',
+            'tmpfs',
+            '-x',
+            'devtmpfs',
+            '-x',
+            'squashfs',
+            '-x',
+            'overlay',
+            '-x',
+            'efivarfs',
+            '-x',
+            'devfs',
+            '-x',
+            'proc',
+            '-x',
+            'sysfs',
+            '-x',
+            'cgroup',
+            '-x',
+            'cgroup2',
+          ];
+    final result = await Process.run('df', args);
+    if (result.exitCode != 0) return const [];
+
+    final volumes = <DiskVolume>[];
+    final seenMounts = <String>{};
+    for (final line in (result.stdout as String).split('\n').skip(1)) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+      final parts = trimmed.split(RegExp(r'\s+'));
+      if (parts.length < 6) continue;
+      final device = parts[0];
+      final totalKb = int.tryParse(parts[1]) ?? 0;
+      final availableKb = int.tryParse(parts[3]) ?? 0;
+      final mount = parts.sublist(5).join(' ');
+      if (totalKb <= 0) continue;
+      if (!_includeUnixMount(device: device, mount: mount)) continue;
+      if (!seenMounts.add(mount)) continue;
+      volumes.add(DiskVolume(
+        device: device,
+        mountPoint: mount,
+        label: _unixVolumeLabel(mount),
+        totalBytes: totalKb * 1024,
+        freeBytes: availableKb.clamp(0, totalKb) * 1024,
+      ));
+    }
+
+    volumes.sort((a, b) {
+      if (a.mountPoint == '/' || a.mountPoint == '/System/Volumes/Data') {
+        return -1;
+      }
+      if (b.mountPoint == '/' || b.mountPoint == '/System/Volumes/Data') {
+        return 1;
+      }
+      return a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase());
+    });
+    return volumes;
+  }
+
+  bool _includeUnixMount({required String device, required String mount}) {
+    if (device == 'map' || device.startsWith('map@') || device == 'devfs') {
+      return false;
+    }
+    if (Platform.isMacOS) {
+      // Data holds user files and reports meaningful used space for the APFS
+      // container; the sealed system volume at / does not.
+      if (mount == '/System/Volumes/Data') return true;
+      if (mount.startsWith('/Volumes/')) return true;
+      return false;
+    }
+    if (mount == '/') return true;
+    // Linux: keep top-level mounts and common data mounts.
+    if (mount == '/boot' || mount == '/boot/efi' || mount == '/efi') return true;
+    if (mount.startsWith('/mnt/') ||
+        mount.startsWith('/media/') ||
+        mount.startsWith('/run/media/')) {
+      return true;
+    }
+    // Other real filesystems mounted at a single path segment (e.g. /home, /data).
+    final depth = mount.split('/').where((s) => s.isNotEmpty).length;
+    return depth <= 1;
+  }
+
+  String _unixVolumeLabel(String mount) {
+    if (mount == '/' || mount == '/System/Volumes/Data') {
+      return Platform.isMacOS ? 'Macintosh HD' : 'Root';
+    }
+    if (mount.startsWith('/Volumes/')) {
+      return mount.substring('/Volumes/'.length);
+    }
+    return '';
+  }
+
   Future<MachineInfo> getMachineInfo() async {
     final hostname = Platform.localHostname;
     final username = Platform.environment['USER'] ??
         Platform.environment['USERNAME'] ??
         '';
+    final disks = await getDiskVolumes();
 
     if (Platform.isMacOS) {
       final swVers = await Process.run('sw_vers', []);
@@ -282,6 +426,7 @@ function run() {
         cpu: cpu.isEmpty ? 'Unknown' : cpu,
         memoryBytes: memoryBytes,
         username: username,
+        disks: disks,
       );
     }
 
@@ -297,6 +442,7 @@ function run() {
         cpu: cpu,
         memoryBytes: 0,
         username: username,
+        disks: disks,
       );
     }
 
@@ -327,6 +473,7 @@ function run() {
       cpu: cpu.isEmpty ? arch : cpu,
       memoryBytes: memoryBytes,
       username: username,
+      disks: disks,
     );
   }
 

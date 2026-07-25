@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app_controller.dart';
 import '../explorer_service.dart';
+import '../models.dart';
 import '../theme.dart';
 
 class MachineInfoPanel extends StatelessWidget {
@@ -88,6 +89,23 @@ class MachineInfoPanel extends StatelessWidget {
                                       ? formatSize(info.memoryBytes, false)
                                       : '—',
                                 ),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'Disks',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: PanoramaColors.muted,
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                if (info.disks.isEmpty)
+                                  const Text(
+                                    'No disks reported.',
+                                    style: TextStyle(fontSize: 13, color: PanoramaColors.muted),
+                                  )
+                                else
+                                  for (final disk in info.disks) _DiskCard(disk: disk),
                               ],
                             ),
                           ),
@@ -121,6 +139,73 @@ class MachineInfoPanel extends StatelessWidget {
           Text(
             value,
             style: const TextStyle(fontSize: 14, color: PanoramaColors.ink),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DiskCard extends StatelessWidget {
+  const _DiskCard({required this.disk});
+
+  final DiskVolume disk;
+
+  @override
+  Widget build(BuildContext context) {
+    final used = disk.usedFraction;
+    final barColor = used >= 0.9
+        ? PanoramaColors.danger
+        : used >= 0.75
+            ? const Color(0xFFC47F17)
+            : PanoramaColors.blue;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                disk.mountPoint.startsWith('/Volumes/') ||
+                        disk.mountPoint.toLowerCase().startsWith('/media/') ||
+                        disk.mountPoint.toLowerCase().startsWith('/run/media/')
+                    ? Icons.usb_outlined
+                    : Icons.storage_outlined,
+                size: 16,
+                color: PanoramaColors.muted,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  disk.displayName,
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            disk.mountPoint == '/System/Volumes/Data' ? '/' : disk.mountPoint,
+            style: const TextStyle(fontSize: 12, color: PanoramaColors.muted),
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: LinearProgressIndicator(
+              value: used,
+              minHeight: 6,
+              backgroundColor: PanoramaColors.line,
+              color: barColor,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '${formatSize(disk.freeBytes, false)} free of ${formatSize(disk.totalBytes, false)}',
+            style: const TextStyle(fontSize: 12, color: PanoramaColors.muted),
           ),
         ],
       ),

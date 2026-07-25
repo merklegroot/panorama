@@ -127,6 +127,37 @@ class DiskUsage {
   int get usedBytes => totalBytes - freeBytes;
 }
 
+class DiskVolume {
+  const DiskVolume({
+    required this.mountPoint,
+    required this.totalBytes,
+    required this.freeBytes,
+    this.device = '',
+    this.label = '',
+  });
+
+  final String mountPoint;
+  final String device;
+  final String label;
+  final int totalBytes;
+  final int freeBytes;
+
+  int get usedBytes => (totalBytes - freeBytes).clamp(0, totalBytes);
+  double get usedFraction =>
+      totalBytes <= 0 ? 0.0 : (usedBytes / totalBytes).clamp(0.0, 1.0);
+
+  String get displayName {
+    if (label.isNotEmpty) return label;
+    if (mountPoint == '/') return 'Root';
+    if (RegExp(r'^[A-Za-z]:\\?$').hasMatch(mountPoint)) {
+      return mountPoint.replaceAll('\\', '');
+    }
+    final parts = mountPoint.split(RegExp(r'[/\\]')).where((p) => p.isNotEmpty);
+    if (parts.isEmpty) return mountPoint;
+    return parts.last;
+  }
+}
+
 class MachineInfo {
   const MachineInfo({
     required this.hostname,
@@ -136,6 +167,7 @@ class MachineInfo {
     required this.cpu,
     required this.memoryBytes,
     required this.username,
+    this.disks = const [],
   });
 
   final String hostname;
@@ -145,4 +177,5 @@ class MachineInfo {
   final String cpu;
   final int memoryBytes;
   final String username;
+  final List<DiskVolume> disks;
 }
