@@ -11,6 +11,7 @@ import '../folder_pane_controller.dart';
 import '../models.dart';
 import '../theme.dart';
 import 'address_path_field.dart';
+import 'marquee_select.dart';
 
 class FolderPaneView extends StatefulWidget {
   const FolderPaneView({
@@ -36,9 +37,25 @@ class _FolderPaneViewState extends State<FolderPaneView> {
   late TextEditingController _addressController;
   final Map<String, TextEditingController> _renameControllers = {};
   int _lastEditRequest = 0;
+  Set<String> _marqueeBase = const {};
+  bool _skipClearOnTap = false;
 
   AppController get app => widget.controller;
   FolderPaneController get pane => widget.pane;
+
+  void _onMarqueeStarted() {
+    app.setActivePane(widget.paneId);
+    _marqueeBase = Set<String>.from(pane.selected);
+    _skipClearOnTap = true;
+  }
+
+  void _onMarqueeSelection(Set<String> paths, {required bool additive}) {
+    if (additive) {
+      pane.setSelected({..._marqueeBase, ...paths});
+    } else {
+      pane.setSelected(paths);
+    }
+  }
 
   @override
   void initState() {
@@ -303,6 +320,10 @@ class _FolderPaneViewState extends State<FolderPaneView> {
       },
       onTap: () {
         app.setActivePane(widget.paneId);
+        if (_skipClearOnTap) {
+          _skipClearOnTap = false;
+          return;
+        }
         pane.setSelected({});
       },
       child: app.view == ViewMode.list ? _buildList() : _buildGrid(),
@@ -328,38 +349,50 @@ class _FolderPaneViewState extends State<FolderPaneView> {
           ),
         ),
         Expanded(
-          child: ListView.builder(
-            itemExtent: 32,
-            itemCount: entries.length,
-            itemBuilder: (context, index) {
-              final entry = entries[index];
-              return _FileRow(
-                key: ValueKey(entry.path),
-                entry: entry,
-                pane: pane,
-                renaming: app.renaming == entry.path,
-                leading: _leadingIcon(entry, grid: false),
-                onSelect: () {
-                  app.setActivePane(widget.paneId);
-                  final shift = HardwareKeyboard.instance.isShiftPressed;
-                  final meta = HardwareKeyboard.instance.isMetaPressed ||
-                      HardwareKeyboard.instance.isControlPressed;
-                  pane.chooseEntry(
-                    entry,
-                    additive: meta && !shift,
-                    range: shift,
-                  );
-                },
-                onOpen: () => app.openEntryIn(pane, entry),
-                onSecondaryTap: (pos) {
-                  app.showContextMenu(
-                    position: pos,
-                    paneId: widget.paneId,
+          child: MarqueeSelectArea(
+            entries: entries,
+            layout: const ListMarqueeLayout(),
+            onMarqueeStarted: _onMarqueeStarted,
+            onMarqueeSelection: _onMarqueeSelection,
+            child: (scrollController, marqueeActive) {
+              return ListView.builder(
+                controller: scrollController,
+                physics: marqueeActive
+                    ? const NeverScrollableScrollPhysics()
+                    : null,
+                itemExtent: 32,
+                itemCount: entries.length,
+                itemBuilder: (context, index) {
+                  final entry = entries[index];
+                  return _FileRow(
+                    key: ValueKey(entry.path),
                     entry: entry,
+                    pane: pane,
+                    renaming: app.renaming == entry.path,
+                    leading: _leadingIcon(entry, grid: false),
+                    onSelect: () {
+                      app.setActivePane(widget.paneId);
+                      final shift = HardwareKeyboard.instance.isShiftPressed;
+                      final meta = HardwareKeyboard.instance.isMetaPressed ||
+                          HardwareKeyboard.instance.isControlPressed;
+                      pane.chooseEntry(
+                        entry,
+                        additive: meta && !shift,
+                        range: shift,
+                      );
+                    },
+                    onOpen: () => app.openEntryIn(pane, entry),
+                    onSecondaryTap: (pos) {
+                      app.showContextMenu(
+                        position: pos,
+                        paneId: widget.paneId,
+                        entry: entry,
+                      );
+                    },
+                    onRenameSubmit: (name) => app.submitRename(entry, name),
+                    onRenameCancel: app.cancelRename,
                   );
                 },
-                onRenameSubmit: (name) => app.submitRename(entry, name),
-                onRenameCancel: app.cancelRename,
               );
             },
           ),
@@ -394,39 +427,49 @@ class _FolderPaneViewState extends State<FolderPaneView> {
 
   Widget _buildGrid() {
     final entries = pane.visibleEntries;
-    return GridView.builder(
-      padding: const EdgeInsets.all(12),
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 120,
-        mainAxisSpacing: 8,
-        crossAxisSpacing: 8,
-        childAspectRatio: 0.85,
-      ),
-      itemCount: entries.length,
-      itemBuilder: (context, index) {
-        final entry = entries[index];
-        return _GridTile(
-          key: ValueKey(entry.path),
-          entry: entry,
-          pane: pane,
-          leading: _leadingIcon(entry, grid: true),
-          onSelect: () {
-            app.setActivePane(widget.paneId);
-            final shift = HardwareKeyboard.instance.isShiftPressed;
-            final meta = HardwareKeyboard.instance.isMetaPressed ||
-                HardwareKeyboard.instance.isControlPressed;
-            pane.chooseEntry(
-              entry,
-              additive: meta && !shift,
-              range: shift,
-            );
-          },
-          onOpen: () => app.openEntryIn(pane, entry),
-          onSecondaryTap: (pos) {
-            app.showContextMenu(
-              position: pos,
-              paneId: widget.paneId,
+    return MarqueeSelectArea(
+      entries: entries,
+      layout: const GridMarqueeLayout(),
+      onMarqueeStarted: _onMarqueeStarted,
+      onMarqueeSelection: _onMarqueeSelection,
+      child: (scrollController, marqueeActive) {
+        return GridView.builder(
+          controller: scrollController,
+          physics: marqueeActive ? const NeverScrollableScrollPhysics() : null,
+          padding: const EdgeInsets.all(12),
+          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: 120,
+            mainAxisSpacing: 8,
+            crossAxisSpacing: 8,
+            childAspectRatio: 0.85,
+          ),
+          itemCount: entries.length,
+          itemBuilder: (context, index) {
+            final entry = entries[index];
+            return _GridTile(
+              key: ValueKey(entry.path),
               entry: entry,
+              pane: pane,
+              leading: _leadingIcon(entry, grid: true),
+              onSelect: () {
+                app.setActivePane(widget.paneId);
+                final shift = HardwareKeyboard.instance.isShiftPressed;
+                final meta = HardwareKeyboard.instance.isMetaPressed ||
+                    HardwareKeyboard.instance.isControlPressed;
+                pane.chooseEntry(
+                  entry,
+                  additive: meta && !shift,
+                  range: shift,
+                );
+              },
+              onOpen: () => app.openEntryIn(pane, entry),
+              onSecondaryTap: (pos) {
+                app.showContextMenu(
+                  position: pos,
+                  paneId: widget.paneId,
+                  entry: entry,
+                );
+              },
             );
           },
         );
