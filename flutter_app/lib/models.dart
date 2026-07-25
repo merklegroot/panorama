@@ -134,6 +134,7 @@ class DiskVolume {
     required this.freeBytes,
     this.device = '',
     this.label = '',
+    this.isPrimary = true,
   });
 
   final String mountPoint;
@@ -141,6 +142,10 @@ class DiskVolume {
   final String label;
   final int totalBytes;
   final int freeBytes;
+
+  /// Internal / fixed volumes shown by default in System info.
+  /// Disk images and other transient mounts are not primary.
+  final bool isPrimary;
 
   int get usedBytes => (totalBytes - freeBytes).clamp(0, totalBytes);
   double get usedFraction =>

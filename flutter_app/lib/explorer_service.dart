@@ -266,7 +266,7 @@ Get-CimInstance Win32_LogicalDisk |
   Where-Object { $_.DriveType -in 2,3,4 -and $_.Size -gt 0 } |
   ForEach-Object {
     $name = if ([string]::IsNullOrWhiteSpace($_.VolumeName)) { '' } else { $_.VolumeName }
-    "{0}`t{1}`t{2}`t{3}" -f $_.DeviceID, $name, $_.Size, $_.FreeSpace
+    "{0}`t{1}`t{2}`t{3}`t{4}" -f $_.DeviceID, $name, $_.Size, $_.FreeSpace, $_.DriveType
   }
 ''',
     ]);
@@ -279,6 +279,7 @@ Get-CimInstance Win32_LogicalDisk |
       if (parts.length < 4) continue;
       final total = int.tryParse(parts[2]) ?? 0;
       final free = int.tryParse(parts[3]) ?? 0;
+      final driveType = parts.length >= 5 ? (int.tryParse(parts[4]) ?? 3) : 3;
       if (total <= 0) continue;
       volumes.add(DiskVolume(
         mountPoint: parts[0],
@@ -286,9 +287,14 @@ Get-CimInstance Win32_LogicalDisk |
         device: parts[0],
         totalBytes: total,
         freeBytes: free.clamp(0, total),
+        // 3 = local fixed disk; collapse removable / network by default.
+        isPrimary: driveType == 3,
       ));
     }
-    volumes.sort((a, b) => a.mountPoint.compareTo(b.mountPoint));
+    volumes.sort((a, b) {
+      if (a.isPrimary != b.isPrimary) return a.isPrimary ? -1 : 1;
+      return a.mountPoint.compareTo(b.mountPoint);
+    });
     return volumes;
   }
 
@@ -322,6 +328,8 @@ Get-CimInstance Win32_LogicalDisk |
     final result = await Process.run('df', args);
     if (result.exitCode != 0) return const [];
 
+    final diskImages = Platform.isMacOS ? await _macDiskImageMounts() : const <String>{};
+
     final volumes = <DiskVolume>[];
     final seenMounts = <String>{};
     for (final line in (result.stdout as String).split('\n').skip(1)) {
@@ -342,10 +350,12 @@ Get-CimInstance Win32_LogicalDisk |
         label: _unixVolumeLabel(mount),
         totalBytes: totalKb * 1024,
         freeBytes: availableKb.clamp(0, totalKb) * 1024,
+        isPrimary: _isPrimaryUnixMount(mount, diskImages),
       ));
     }
 
     volumes.sort((a, b) {
+      if (a.isPrimary != b.isPrimary) return a.isPrimary ? -1 : 1;
       if (a.mountPoint == '/' || a.mountPoint == '/System/Volumes/Data') {
         return -1;
       }
@@ -355,6 +365,46 @@ Get-CimInstance Win32_LogicalDisk |
       return a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase());
     });
     return volumes;
+  }
+
+  Future<Set<String>> _macDiskImageMounts() async {
+    try {
+      final result = await Process.run('hdiutil', ['info']);
+      if (result.exitCode != 0) return {};
+      final mounts = <String>{};
+      for (final line in (result.stdout as String).split('\n')) {
+        // Lines look like: /dev/disk6s1\tUUID\t/Volumes/Name
+        for (final part in line.split(RegExp(r'\t+'))) {
+          final trimmed = part.trim();
+          if (trimmed.startsWith('/Volumes/')) {
+            mounts.add(trimmed);
+          }
+        }
+      }
+      return mounts;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  bool _isPrimaryUnixMount(String mount, Set<String> diskImages) {
+    if (Platform.isMacOS) {
+      if (mount == '/System/Volumes/Data') return true;
+      // Disk images (DMGs, etc.) under /Volumes — collapse by default.
+      if (diskImages.contains(mount)) return false;
+      // Physical externals under /Volumes stay visible.
+      if (mount.startsWith('/Volumes/')) return true;
+      return false;
+    }
+    if (mount == '/') return true;
+    if (mount == '/boot' || mount == '/boot/efi' || mount == '/efi') return true;
+    if (mount.startsWith('/mnt/') ||
+        mount.startsWith('/media/') ||
+        mount.startsWith('/run/media/')) {
+      return false;
+    }
+    final depth = mount.split('/').where((s) => s.isNotEmpty).length;
+    return depth <= 1;
   }
 
   bool _includeUnixMount({required String device, required String mount}) {

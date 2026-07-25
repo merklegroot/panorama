@@ -104,8 +104,14 @@ class MachineInfoPanel extends StatelessWidget {
                                     'No disks reported.',
                                     style: TextStyle(fontSize: 13, color: PanoramaColors.muted),
                                   )
-                                else
-                                  for (final disk in info.disks) _DiskCard(disk: disk),
+                                else ...[
+                                  for (final disk in info.disks.where((d) => d.isPrimary))
+                                    _DiskCard(disk: disk),
+                                  if (info.disks.any((d) => !d.isPrimary))
+                                    _OtherVolumesSection(
+                                      disks: info.disks.where((d) => !d.isPrimary).toList(),
+                                    ),
+                                ],
                               ],
                             ),
                           ),
@@ -146,6 +152,35 @@ class MachineInfoPanel extends StatelessWidget {
   }
 }
 
+class _OtherVolumesSection extends StatelessWidget {
+  const _OtherVolumesSection({required this.disks});
+
+  final List<DiskVolume> disks;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = disks.length == 1
+        ? '1 other volume'
+        : '${disks.length} other volumes';
+
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        initiallyExpanded: false,
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(top: 4),
+        title: Text(
+          label,
+          style: const TextStyle(fontSize: 13, color: PanoramaColors.muted),
+        ),
+        children: [
+          for (final disk in disks) _DiskCard(disk: disk),
+        ],
+      ),
+    );
+  }
+}
+
 class _DiskCard extends StatelessWidget {
   const _DiskCard({required this.disk});
 
@@ -159,6 +194,11 @@ class _DiskCard extends StatelessWidget {
         : used >= 0.75
             ? const Color(0xFFC47F17)
             : PanoramaColors.blue;
+    final isExternal = !disk.isPrimary ||
+        disk.mountPoint.startsWith('/Volumes/') ||
+        disk.mountPoint.toLowerCase().startsWith('/media/') ||
+        disk.mountPoint.toLowerCase().startsWith('/run/media/') ||
+        disk.mountPoint.toLowerCase().startsWith('/mnt/');
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
@@ -168,11 +208,7 @@ class _DiskCard extends StatelessWidget {
           Row(
             children: [
               Icon(
-                disk.mountPoint.startsWith('/Volumes/') ||
-                        disk.mountPoint.toLowerCase().startsWith('/media/') ||
-                        disk.mountPoint.toLowerCase().startsWith('/run/media/')
-                    ? Icons.usb_outlined
-                    : Icons.storage_outlined,
+                isExternal ? Icons.usb_outlined : Icons.storage_outlined,
                 size: 16,
                 color: PanoramaColors.muted,
               ),
