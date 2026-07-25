@@ -57,8 +57,18 @@ jobs:
           if-no-files-found: error
 
   build-linux:
-    name: Build Linux
-    runs-on: ubuntu-latest
+    name: Build Linux (${{ matrix.deb_arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            flutter_arch: x64
+            deb_arch: amd64
+          - runner: ubuntu-24.04-arm
+            flutter_arch: arm64
+            deb_arch: arm64
     defaults:
       run:
         working-directory: flutter_app
@@ -89,9 +99,11 @@ jobs:
         run: flutter pub get
 
       - name: Analyze
+        if: matrix.deb_arch == 'amd64'
         run: flutter analyze
 
       - name: Test
+        if: matrix.deb_arch == 'amd64'
         run: flutter test
 
       - name: Build Linux
@@ -101,14 +113,15 @@ jobs:
         working-directory: .
         run: |
           ./scripts/package-deb.sh 0.0.0 \
-            flutter_app/build/linux/x64/release/bundle \
-            release
+            "flutter_app/build/linux/${{ matrix.flutter_arch }}/release/bundle" \
+            release \
+            "${{ matrix.deb_arch }}"
 
       - name: Upload Linux .deb
         uses: actions/upload-artifact@v4
         with:
-          name: Panorama-Linux
-          path: release/Panorama-*-linux-amd64.deb
+          name: Panorama-Linux-${{ matrix.deb_arch }}
+          path: release/Panorama-*-linux-${{ matrix.deb_arch }}.deb
           if-no-files-found: error
 
   build-windows:

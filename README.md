@@ -22,7 +22,7 @@ flutter build macos
 
 flutter build linux --release
 ../scripts/package-deb.sh 1.0.6
-# → release/Panorama-1.0.6-linux-amd64.deb
+# → release/Panorama-1.0.6-linux-amd64.deb  (or linux-arm64 on ARM hosts)
 
 flutter build windows --release
 # then on Windows:
@@ -30,7 +30,7 @@ powershell -File ../scripts/package-windows.ps1 -Version 1.0.6
 # → release/Panorama-1.0.6-windows-x64-setup.exe
 ```
 
-Tagged releases publish a macOS `.zip`, Linux `.deb`, and Windows installer via GitHub Actions.
+Tagged releases publish a macOS `.zip`, Linux `.deb` (amd64 + arm64), and Windows installer via GitHub Actions.
 ## Spotlight launcher (macOS)
 
 Install a `/Applications/Panorama.app` stub that opens the local Flutter build (so notes stay in this repo for Cursor):

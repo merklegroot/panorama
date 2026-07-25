@@ -1,13 +1,54 @@
 #!/usr/bin/env bash
 # Package the Flutter Linux release bundle into a .deb.
-# Usage: ./scripts/package-deb.sh <version> [bundle_dir] [output_dir]
+# Usage: ./scripts/package-deb.sh <version> [bundle_dir] [output_dir] [deb_arch]
+# deb_arch: amd64 | arm64 (default: inferred from bundle path or host uname)
 set -euo pipefail
 
 VERSION="${1:?version required (e.g. 1.0.6)}"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BUNDLE_DIR="${2:-$REPO_ROOT/flutter_app/build/linux/x64/release/bundle}"
+BUNDLE_DIR="${2:-}"
 OUTPUT_DIR="${3:-$REPO_ROOT/release}"
-ARCH="amd64"
+ARCH="${4:-}"
+
+detect_arch_from_uname() {
+  case "$(uname -m)" in
+    x86_64|amd64) echo "amd64" ;;
+    aarch64|arm64) echo "arm64" ;;
+    *) echo "amd64" ;;
+  esac
+}
+
+flutter_arch_for_deb() {
+  case "$1" in
+    amd64) echo "x64" ;;
+    arm64) echo "arm64" ;;
+    *) echo "x64" ;;
+  esac
+}
+
+if [[ -z "$ARCH" ]]; then
+  if [[ -n "$BUNDLE_DIR" && "$BUNDLE_DIR" == *"/arm64/"* ]]; then
+    ARCH="arm64"
+  elif [[ -n "$BUNDLE_DIR" && "$BUNDLE_DIR" == *"/x64/"* ]]; then
+    ARCH="amd64"
+  else
+    ARCH="$(detect_arch_from_uname)"
+  fi
+fi
+
+case "$ARCH" in
+  amd64|arm64) ;;
+  *)
+    echo "Unsupported deb arch: $ARCH (use amd64 or arm64)" >&2
+    exit 1
+    ;;
+esac
+
+FLUTTER_ARCH="$(flutter_arch_for_deb "$ARCH")"
+if [[ -z "$BUNDLE_DIR" ]]; then
+  BUNDLE_DIR="$REPO_ROOT/flutter_app/build/linux/${FLUTTER_ARCH}/release/bundle"
+fi
+
 PKG_NAME="panorama"
 DEB_ROOT="$(mktemp -d)"
 STAGE="$DEB_ROOT/${PKG_NAME}_${VERSION}_${ARCH}"
@@ -88,6 +129,6 @@ EOF
 chmod 755 "$STAGE/DEBIAN/postinst"
 
 mkdir -p "$OUTPUT_DIR"
-OUT_DEB="$OUTPUT_DIR/Panorama-${VERSION}-linux-amd64.deb"
+OUT_DEB="$OUTPUT_DIR/Panorama-${VERSION}-linux-${ARCH}.deb"
 dpkg-deb --build --root-owner-group "$STAGE" "$OUT_DEB"
 echo "Wrote $OUT_DEB"

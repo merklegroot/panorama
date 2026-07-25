@@ -127,9 +127,20 @@ jobs:
           if-no-files-found: error
 
   build-linux:
-    name: Build Linux (.deb)
+    name: Build Linux (${{ matrix.deb_arch }})
     needs: prepare
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            flutter_arch: x64
+            deb_arch: amd64
+          # Native arm64 runner (public repos). Flutter does not cross-compile linux-arm64.
+          - runner: ubuntu-24.04-arm
+            flutter_arch: arm64
+            deb_arch: arm64
     defaults:
       run:
         working-directory: flutter_app
@@ -174,14 +185,15 @@ jobs:
         run: |
           ./scripts/package-deb.sh \
             "${{ needs.prepare.outputs.version }}" \
-            flutter_app/build/linux/x64/release/bundle \
-            release
+            "flutter_app/build/linux/${{ matrix.flutter_arch }}/release/bundle" \
+            release \
+            "${{ matrix.deb_arch }}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Panorama-Linux
-          path: release/Panorama-*-linux-amd64.deb
+          name: Panorama-Linux-${{ matrix.deb_arch }}
+          path: release/Panorama-*-linux-${{ matrix.deb_arch }}.deb
           if-no-files-found: error
 
   build-windows:
@@ -263,11 +275,13 @@ jobs:
             - Or use the repo launcher: `./scripts/install-mac.sh` after building locally
 
             ### Linux
-            - Download the **`.deb`** and install with:
+            - Download the **`.deb`** matching your CPU:
+              - **x86_64:** `Panorama-${{ needs.prepare.outputs.version }}-linux-amd64.deb`
+              - **ARM64:** `Panorama-${{ needs.prepare.outputs.version }}-linux-arm64.deb`
+            - Install with:
               ```bash
-              sudo apt install ./Panorama-${{ needs.prepare.outputs.version }}-linux-amd64.deb
+              sudo apt install ./Panorama-*-linux-*.deb
               ```
-            - Or: `sudo dpkg -i Panorama-*-linux-amd64.deb`
             - Requires GTK 3 (Ubuntu/Debian desktop)
 
             ### Windows
