@@ -328,7 +328,45 @@ class AppController extends ChangeNotifier {
   Future<void> removeSelected() async {
     if (activePane.selected.isEmpty) return;
     try {
-      await api.trash(activePane.selected.toList());
+      if (api.isInTrash(activePane.path)) {
+        await api.deletePermanently(activePane.selected.toList());
+      } else {
+        await api.trash(activePane.selected.toList());
+      }
+      activePane.setSelected({});
+      refreshAll();
+    } catch (reason) {
+      activePane.setError(reason.toString());
+    }
+  }
+
+  bool get activePaneInTrash => api.isInTrash(activePane.path);
+
+  Future<void> restoreSelected() async {
+    if (activePane.selected.isEmpty) return;
+    try {
+      await api.restoreFromTrash(activePane.selected.toList());
+      activePane.setSelected({});
+      refreshAll();
+    } catch (reason) {
+      activePane.setError(reason.toString());
+    }
+  }
+
+  Future<void> deleteSelectedPermanently() async {
+    if (activePane.selected.isEmpty) return;
+    try {
+      await api.deletePermanently(activePane.selected.toList());
+      activePane.setSelected({});
+      refreshAll();
+    } catch (reason) {
+      activePane.setError(reason.toString());
+    }
+  }
+
+  Future<void> emptyTrash() async {
+    try {
+      await api.emptyTrash();
       activePane.setSelected({});
       refreshAll();
     } catch (reason) {
@@ -574,7 +612,11 @@ class AppController extends ChangeNotifier {
     if ((event.logicalKey == LogicalKeyboardKey.delete ||
             (meta && event.logicalKey == LogicalKeyboardKey.backspace)) &&
         activePane.selected.isNotEmpty) {
-      removeSelected();
+      if (activePaneInTrash) {
+        deleteSelectedPermanently();
+      } else {
+        removeSelected();
+      }
       return KeyEventResult.handled;
     }
 

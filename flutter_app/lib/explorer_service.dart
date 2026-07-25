@@ -61,6 +61,21 @@ class ExplorerService {
         p.normalize(p.join(home, '.local', 'share', 'Trash', 'files'));
   }
 
+  /// True when browsing Trash or a folder inside it.
+  bool isInTrash(String directoryPath) {
+    if (isTrashPath(directoryPath)) return true;
+    final home = Platform.environment['HOME'] ?? '';
+    if (home.isEmpty) return false;
+    final normalized = p.normalize(directoryPath);
+    if (Platform.isMacOS) {
+      final root = p.normalize(p.join(home, '.Trash'));
+      return normalized == root || p.isWithin(root, normalized);
+    }
+    if (Platform.isWindows) return false;
+    final root = p.normalize(p.join(home, '.local', 'share', 'Trash', 'files'));
+    return normalized == root || p.isWithin(root, normalized);
+  }
+
   Future<List<FileEntry>> readDirectory(String directoryPath, bool showHidden) async {
     if (Platform.isMacOS && isTrashPath(directoryPath)) {
       return _readMacTrash(showHidden);
@@ -765,6 +780,11 @@ function run(argv) {
 
   Future<void> trash(List<String> paths) async {
     for (final targetPath in paths) {
+      if (isTrashPath(p.dirname(targetPath)) || isTrashPath(targetPath)) {
+        // Already in trash — permanent delete instead of nesting.
+        await deletePermanently([targetPath]);
+        continue;
+      }
       if (Platform.isMacOS) {
         final escaped = targetPath.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
         final result = await Process.run('osascript', [
@@ -792,16 +812,238 @@ function run(argv) {
           "Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile('$escaped','OnlyErrorDialogs','SendToRecycleBin')",
         ]);
       } else {
+        await _linuxMoveToTrash(targetPath);
+      }
+    }
+  }
+
+  Future<void> _linuxMoveToTrash(String targetPath) async {
+    final home = Platform.environment['HOME'] ?? '.';
+    final filesDir = Directory(p.join(home, '.local', 'share', 'Trash', 'files'));
+    final infoDir = Directory(p.join(home, '.local', 'share', 'Trash', 'info'));
+    await filesDir.create(recursive: true);
+    await infoDir.create(recursive: true);
+
+    final destination = await uniquePath(filesDir.path, p.basename(targetPath));
+    final type = await FileSystemEntity.type(targetPath, followLinks: false);
+    if (type == FileSystemEntityType.directory) {
+      await Directory(targetPath).rename(destination);
+    } else {
+      await File(targetPath).rename(destination);
+    }
+
+    final encodedPath = Uri.encodeComponent(targetPath).replaceAll('%2F', '/');
+    final stamp = DateTime.now().toIso8601String().split('.').first;
+    final infoPath = p.join(infoDir.path, '${p.basename(destination)}.trashinfo');
+    await File(infoPath).writeAsString(
+      '[Trash Info]\nPath=$encodedPath\nDeletionDate=$stamp\n',
+    );
+  }
+
+  /// Restore items from Trash to their original locations when known.
+  Future<void> restoreFromTrash(List<String> paths) async {
+    if (paths.isEmpty) return;
+    if (Platform.isMacOS) {
+      await _macRestoreFromTrash(paths);
+      return;
+    }
+    if (Platform.isWindows) {
+      throw Exception('Restore from Recycle Bin is not supported yet.');
+    }
+    await _linuxRestoreFromTrash(paths);
+  }
+
+  Future<void> _macRestoreFromTrash(List<String> paths) async {
+    final script = '''
+function run(argv) {
+  const finder = Application("Finder");
+  const targets = JSON.parse(argv[0]);
+  const items = finder.trash.items();
+  const errors = [];
+  for (const wanted of targets) {
+    let matched = null;
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      try {
+        const url = String(item.url());
+        const path = decodeURIComponent(url.replace(/^file:\\/\\/\\/?/, "/"));
+        if (path === wanted || path === decodeURIComponent(wanted)) {
+          matched = item;
+          break;
+        }
+      } catch (e) {}
+    }
+    if (!matched) {
+      errors.push(wanted);
+      continue;
+    }
+    try {
+      finder.putAway(matched);
+    } catch (e) {
+      errors.push(wanted + ": " + e);
+    }
+  }
+  if (errors.length) {
+    throw new Error("Could not restore: " + errors.join("; "));
+  }
+}
+''';
+    final result = await Process.run(
+      'osascript',
+      ['-l', 'JavaScript', '-e', script, jsonEncode(paths)],
+    ).timeout(const Duration(seconds: 30));
+    if (result.exitCode != 0) {
+      final err = (result.stderr as String).trim();
+      throw Exception(err.isEmpty ? 'Could not restore the selected items.' : err);
+    }
+  }
+
+  Future<void> _linuxRestoreFromTrash(List<String> paths) async {
+    final home = Platform.environment['HOME'] ?? '.';
+    final infoDir = p.join(home, '.local', 'share', 'Trash', 'info');
+    final desktop = Directory(p.join(home, 'Desktop'));
+    final fallbackDir =
+        await desktop.exists() ? desktop.path : home;
+
+    for (final trashPath in paths) {
+      final base = p.basename(trashPath);
+      final infoFile = File(p.join(infoDir, '$base.trashinfo'));
+      var destination = p.join(fallbackDir, base);
+
+      if (await infoFile.exists()) {
+        final content = await infoFile.readAsString();
+        for (final line in content.split('\n')) {
+          if (line.startsWith('Path=')) {
+            final raw = line.substring(5).trim();
+            try {
+              destination = Uri.decodeComponent(raw);
+            } catch (_) {
+              destination = raw;
+            }
+            break;
+          }
+        }
+      }
+
+      final parent = Directory(p.dirname(destination));
+      if (!await parent.exists()) {
+        await parent.create(recursive: true);
+      }
+      destination = await uniquePath(p.dirname(destination), p.basename(destination));
+
+      final type = await FileSystemEntity.type(trashPath, followLinks: false);
+      if (type == FileSystemEntityType.directory) {
+        await Directory(trashPath).rename(destination);
+      } else if (type != FileSystemEntityType.notFound) {
+        await File(trashPath).rename(destination);
+      }
+      if (await infoFile.exists()) {
+        await infoFile.delete();
+      }
+    }
+  }
+
+  Future<void> deletePermanently(List<String> paths) async {
+    if (paths.isEmpty) return;
+    if (Platform.isMacOS) {
+      await _macDeletePermanently(paths);
+      return;
+    }
+    for (final targetPath in paths) {
+      if (Platform.isLinux) {
         final home = Platform.environment['HOME'] ?? '.';
-        final trashDir = Directory(p.join(home, '.local', 'share', 'Trash', 'files'));
-        await trashDir.create(recursive: true);
-        final destination = await uniquePath(trashDir.path, p.basename(targetPath));
+        final infoFile = File(
+          p.join(home, '.local', 'share', 'Trash', 'info', '${p.basename(targetPath)}.trashinfo'),
+        );
+        if (await infoFile.exists()) {
+          await infoFile.delete();
+        }
+      }
+      final type = await FileSystemEntity.type(targetPath, followLinks: false);
+      if (type == FileSystemEntityType.directory) {
+        await Directory(targetPath).delete(recursive: true);
+      } else if (type != FileSystemEntityType.notFound) {
+        await File(targetPath).delete();
+      }
+    }
+  }
+
+  Future<void> _macDeletePermanently(List<String> paths) async {
+    final script = '''
+function run(argv) {
+  const finder = Application("Finder");
+  const targets = JSON.parse(argv[0]);
+  const items = finder.trash.items();
+  const toDelete = [];
+  for (const wanted of targets) {
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      try {
+        const url = String(item.url());
+        const path = decodeURIComponent(url.replace(/^file:\\/\\/\\/?/, "/"));
+        if (path === wanted || path === decodeURIComponent(wanted)) {
+          toDelete.push(item);
+          break;
+        }
+      } catch (e) {}
+    }
+  }
+  if (toDelete.length) {
+    finder.delete(toDelete, {permanently: true});
+  }
+}
+''';
+    final result = await Process.run(
+      'osascript',
+      ['-l', 'JavaScript', '-e', script, jsonEncode(paths)],
+    ).timeout(const Duration(seconds: 30));
+    if (result.exitCode != 0) {
+      // Fallback: unlink paths directly.
+      for (final targetPath in paths) {
         final type = await FileSystemEntity.type(targetPath, followLinks: false);
         if (type == FileSystemEntityType.directory) {
-          await Directory(targetPath).rename(destination);
-        } else {
-          await File(targetPath).rename(destination);
+          await Directory(targetPath).delete(recursive: true);
+        } else if (type != FileSystemEntityType.notFound) {
+          await File(targetPath).delete();
         }
+      }
+    }
+  }
+
+  Future<void> emptyTrash() async {
+    if (Platform.isMacOS) {
+      final result = await Process.run('osascript', [
+        '-e',
+        'tell application "Finder" to empty the trash',
+      ]).timeout(const Duration(seconds: 120));
+      if (result.exitCode != 0) {
+        final err = (result.stderr as String).trim();
+        throw Exception(err.isEmpty ? 'Could not empty the Trash.' : err);
+      }
+      return;
+    }
+    if (Platform.isWindows) {
+      await Process.run('powershell', [
+        '-NoProfile',
+        '-Command',
+        'Clear-RecycleBin -Force -ErrorAction SilentlyContinue',
+      ]);
+      return;
+    }
+
+    final home = Platform.environment['HOME'] ?? '.';
+    final filesDir = Directory(p.join(home, '.local', 'share', 'Trash', 'files'));
+    final infoDir = Directory(p.join(home, '.local', 'share', 'Trash', 'info'));
+    for (final dir in [filesDir, infoDir]) {
+      if (!await dir.exists()) continue;
+      await for (final entity in dir.list(followLinks: false)) {
+        try {
+          if (entity is Directory) {
+            await entity.delete(recursive: true);
+          } else {
+            await entity.delete();
+          }
+        } catch (_) {}
       }
     }
   }

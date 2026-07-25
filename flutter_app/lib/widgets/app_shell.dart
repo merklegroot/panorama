@@ -25,9 +25,10 @@ class AppShell extends StatelessWidget {
           onKeyEvent: (node, event) {
             // Don't intercept when typing in text fields.
             final primary = FocusManager.instance.primaryFocus;
-            final context = primary?.context;
-            if (context != null) {
-              final editable = context.findAncestorWidgetOfExactType<EditableText>();
+            final focusContext = primary?.context;
+            if (focusContext != null) {
+              final editable =
+                  focusContext.findAncestorWidgetOfExactType<EditableText>();
               if (editable != null) {
                 if (event.logicalKey == LogicalKeyboardKey.escape &&
                     (controller.notesOpen || controller.machineInfoOpen)) {

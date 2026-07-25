@@ -5,6 +5,7 @@ import '../explorer_service.dart';
 import '../folder_pane_controller.dart';
 import '../theme.dart';
 import 'address_path_field.dart';
+import 'trash_dialogs.dart';
 
 class CommandBar extends StatelessWidget {
   const CommandBar({super.key, required this.controller});
@@ -22,7 +23,7 @@ class CommandBar extends StatelessWidget {
       child: Row(
         children: [
           FilledButton.icon(
-            onPressed: controller.createFolder,
+            onPressed: controller.activePaneInTrash ? null : controller.createFolder,
             icon: const Icon(Icons.add, size: 16),
             label: const Text('New folder'),
             style: FilledButton.styleFrom(
@@ -43,22 +44,44 @@ class CommandBar extends StatelessWidget {
               final pane = controller.activePane;
               final hasSelection = pane.selected.isNotEmpty;
               final singleSelection = pane.selected.length == 1;
+              final inTrash = controller.activePaneInTrash;
               return Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _Tb(icon: Icons.content_cut, tip: 'Cut', enabled: hasSelection, onPressed: () => controller.copySelected(true)),
-                  _Tb(icon: Icons.copy, tip: 'Copy', enabled: hasSelection, onPressed: () => controller.copySelected(false)),
-                  _Tb(icon: Icons.content_paste, tip: 'Paste', onPressed: controller.paste),
-                  _Tb(
-                    icon: Icons.edit,
-                    tip: 'Rename',
-                    enabled: singleSelection,
-                    onPressed: () {
-                      final entry = controller.selectedEntries.firstOrNull;
-                      if (entry != null) controller.startRename(entry.path);
-                    },
-                  ),
-                  _Tb(icon: Icons.delete_outline, tip: 'Move to Trash', enabled: hasSelection, onPressed: controller.removeSelected),
+                  if (inTrash) ...[
+                    _Tb(
+                      icon: Icons.restore_from_trash_outlined,
+                      tip: 'Restore',
+                      enabled: hasSelection,
+                      onPressed: controller.restoreSelected,
+                    ),
+                    _Tb(
+                      icon: Icons.delete_forever_outlined,
+                      tip: 'Delete Permanently',
+                      enabled: hasSelection,
+                      onPressed: () => confirmDeletePermanently(context, controller),
+                    ),
+                    _Tb(
+                      icon: Icons.delete_sweep_outlined,
+                      tip: 'Empty Trash',
+                      enabled: pane.entries.isNotEmpty,
+                      onPressed: () => confirmEmptyTrash(context, controller),
+                    ),
+                  ] else ...[
+                    _Tb(icon: Icons.content_cut, tip: 'Cut', enabled: hasSelection, onPressed: () => controller.copySelected(true)),
+                    _Tb(icon: Icons.copy, tip: 'Copy', enabled: hasSelection, onPressed: () => controller.copySelected(false)),
+                    _Tb(icon: Icons.content_paste, tip: 'Paste', onPressed: controller.paste),
+                    _Tb(
+                      icon: Icons.edit,
+                      tip: 'Rename',
+                      enabled: singleSelection,
+                      onPressed: () {
+                        final entry = controller.selectedEntries.firstOrNull;
+                        if (entry != null) controller.startRename(entry.path);
+                      },
+                    ),
+                    _Tb(icon: Icons.delete_outline, tip: 'Move to Trash', enabled: hasSelection, onPressed: controller.removeSelected),
+                  ],
                 ],
               );
             },

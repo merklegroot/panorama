@@ -5,6 +5,7 @@ import '../app_controller.dart';
 import '../folder_pane_controller.dart';
 import '../models.dart';
 import '../theme.dart';
+import 'trash_dialogs.dart';
 
 class NotesPanel extends StatefulWidget {
   const NotesPanel({super.key, required this.controller});
@@ -357,7 +358,9 @@ class ExplorerContextMenu extends StatelessWidget {
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(minWidth: 200, maxWidth: 240),
                   child: IntrinsicWidth(
-                    child: entry != null ? _entryMenu(entry) : _emptyMenu(),
+                    child: entry != null
+                        ? _entryMenu(context, entry)
+                        : _emptyMenu(context),
                   ),
                 ),
               ),
@@ -368,15 +371,48 @@ class ExplorerContextMenu extends StatelessWidget {
     );
   }
 
-  Widget _entryMenu(FileEntry entry) {
+  Widget _entryMenu(BuildContext context, FileEntry entry) {
+    final pane = controller.contextMenuPane == PaneId.left
+        ? controller.left
+        : controller.right;
+    final inTrash = controller.api.isInTrash(pane.path);
+
+    if (inTrash) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _item(Icons.folder_open, 'Open', () {
+            controller.openEntryIn(pane, entry);
+            controller.hideContextMenu();
+          }),
+          if (!entry.isDirectory)
+            _item(Icons.search, 'Show in Finder', () {
+              controller.api.reveal(entry.path);
+              controller.hideContextMenu();
+            }),
+          const Divider(height: 1),
+          _item(Icons.restore_from_trash_outlined, 'Restore', () {
+            controller.restoreSelected();
+            controller.hideContextMenu();
+          }),
+          _item(Icons.delete_forever_outlined, 'Delete Permanently', () {
+            controller.hideContextMenu();
+            confirmDeletePermanently(
+              context,
+              controller,
+              count: pane.selected.length,
+            );
+          }, danger: true),
+        ],
+      );
+    }
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _item(Icons.folder_open, 'Open', () {
-          final pane = controller.contextMenuPane == PaneId.left
-              ? controller.left
-              : controller.right;
           controller.openEntryIn(pane, entry);
           controller.hideContextMenu();
         }),
@@ -463,7 +499,30 @@ class ExplorerContextMenu extends StatelessWidget {
     );
   }
 
-  Widget _emptyMenu() {
+  Widget _emptyMenu(BuildContext context) {
+    final pane = controller.contextMenuPane == PaneId.left
+        ? controller.left
+        : controller.right;
+    final inTrash = controller.api.isInTrash(pane.path);
+
+    if (inTrash) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _item(Icons.delete_sweep_outlined, 'Empty Trash', () {
+            controller.hideContextMenu();
+            confirmEmptyTrash(context, controller);
+          }, danger: true),
+          const Divider(height: 1),
+          _item(Icons.refresh, 'Refresh', () {
+            controller.refreshActive();
+            controller.hideContextMenu();
+          }),
+        ],
+      );
+    }
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
