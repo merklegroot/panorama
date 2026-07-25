@@ -19,11 +19,31 @@ static void first_frame_cb(MyApplication* self, FlView* view) {
   gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
 }
 
+static void set_window_icon(GtkWindow* window) {
+  // Prefer the themed icon when installed via .deb (matches APPLICATION_ID).
+  gtk_window_set_default_icon_name(APPLICATION_ID);
+
+  g_autoptr(GError) error = nullptr;
+  g_autofree gchar* exe_link = g_file_read_link("/proc/self/exe", &error);
+  if (exe_link == nullptr) {
+    return;
+  }
+
+  g_autofree gchar* exe_dir = g_path_get_dirname(exe_link);
+  g_autofree gchar* icon_path = g_build_filename(
+      exe_dir, "data", "flutter_assets", "assets", "app_icon.png", nullptr);
+  if (g_file_test(icon_path, G_FILE_TEST_IS_REGULAR)) {
+    gtk_window_set_icon_from_file(window, icon_path, nullptr);
+  }
+}
+
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
+
+  set_window_icon(window);
 
   // Use a header bar when running in GNOME as this is the common style used
   // by applications and is the setup most users will be using (e.g. Ubuntu

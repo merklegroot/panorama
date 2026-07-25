@@ -67,7 +67,12 @@ mkdir -p \
   "$STAGE/usr/bin" \
   "$STAGE/usr/lib/panorama" \
   "$STAGE/usr/share/applications" \
+  "$STAGE/usr/share/icons/hicolor/16x16/apps" \
+  "$STAGE/usr/share/icons/hicolor/32x32/apps" \
+  "$STAGE/usr/share/icons/hicolor/64x64/apps" \
+  "$STAGE/usr/share/icons/hicolor/128x128/apps" \
   "$STAGE/usr/share/icons/hicolor/256x256/apps" \
+  "$STAGE/usr/share/icons/hicolor/512x512/apps" \
   "$STAGE/usr/share/doc/panorama"
 
 cp -a "$BUNDLE_DIR"/. "$STAGE/usr/lib/panorama/"
@@ -80,13 +85,25 @@ exec /usr/lib/panorama/panorama "$@"
 EOF
 chmod 755 "$STAGE/usr/bin/panorama"
 
+# Desktop entry + icons use APPLICATION_ID so Wayland/GNOME match the window.
+DESKTOP_ID="com.panorama.panorama"
 cp "$REPO_ROOT/flutter_app/linux/packaging/panorama.desktop" \
-  "$STAGE/usr/share/applications/panorama.desktop"
+  "$STAGE/usr/share/applications/${DESKTOP_ID}.desktop"
 
-ICON_SRC="$REPO_ROOT/flutter_app/macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_256.png"
-if [[ -f "$ICON_SRC" ]]; then
-  cp "$ICON_SRC" "$STAGE/usr/share/icons/hicolor/256x256/apps/panorama.png"
-fi
+ICONSET="$REPO_ROOT/flutter_app/macos/Runner/Assets.xcassets/AppIcon.appiconset"
+install_icon() {
+  local size="$1"
+  local src="$ICONSET/app_icon_${size}.png"
+  if [[ -f "$src" ]]; then
+    cp "$src" "$STAGE/usr/share/icons/hicolor/${size}x${size}/apps/${DESKTOP_ID}.png"
+  fi
+}
+install_icon 16
+install_icon 32
+install_icon 64
+install_icon 128
+install_icon 256
+install_icon 512
 
 cat >"$STAGE/usr/share/doc/panorama/copyright" <<'EOF'
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
