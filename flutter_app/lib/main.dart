@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -12,13 +14,16 @@ Future<void> main() async {
 
   if (isDesktop) {
     await windowManager.ensureInitialized();
-    const options = WindowOptions(
-      size: Size(1240, 780),
-      minimumSize: Size(850, 520),
+    final options = WindowOptions(
+      size: const Size(1240, 780),
+      minimumSize: const Size(850, 520),
       center: true,
-      backgroundColor: Color(0xFFF6F7F9),
+      backgroundColor: const Color(0xFFF6F7F9),
       skipTaskbar: false,
-      titleBarStyle: TitleBarStyle.hidden,
+      // macOS uses a hidden title bar with native traffic lights; Linux/Windows
+      // need a normal title bar for minimize / maximize / close.
+      titleBarStyle:
+          Platform.isMacOS ? TitleBarStyle.hidden : TitleBarStyle.normal,
       title: 'Panorama',
       windowButtonVisibility: true,
     );
