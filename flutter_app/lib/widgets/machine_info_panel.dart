@@ -4,6 +4,7 @@ import '../app_controller.dart';
 import '../explorer_service.dart';
 import '../models.dart';
 import '../theme.dart';
+import 'system_icons.dart';
 
 class MachineInfoPanel extends StatelessWidget {
   const MachineInfoPanel({super.key, required this.controller});
@@ -97,9 +98,21 @@ class MachineInfoPanel extends StatelessWidget {
                             child: ListView(
                               padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
                               children: [
-                                _row('Name', info.hostname),
-                                _row('User', info.username.isEmpty ? '—' : info.username),
-                                _row('OS', '${info.osName} ${info.osVersion}'.trim()),
+                                _row(
+                                  'Name',
+                                  info.hostname,
+                                  icon: SystemIcons.hostname(),
+                                ),
+                                _row(
+                                  'User',
+                                  info.username.isEmpty ? '—' : info.username,
+                                  icon: SystemIcons.user(),
+                                ),
+                                _row(
+                                  'OS',
+                                  '${info.osName} ${info.osVersion}'.trim(),
+                                  icon: SystemIcons.os(info.osName),
+                                ),
                                 _ProcessorRow(
                                   cpu: info.cpu,
                                   arch: info.arch,
@@ -110,6 +123,7 @@ class MachineInfoPanel extends StatelessWidget {
                                   info.memoryBytes > 0
                                       ? formatSize(info.memoryBytes, false)
                                       : '—',
+                                  icon: SystemIcons.memory(),
                                 ),
                                 const SizedBox(height: 8),
                                 const Text(
@@ -149,7 +163,7 @@ class MachineInfoPanel extends StatelessWidget {
     );
   }
 
-  Widget _row(String label, String value) {
+  Widget _row(String label, String value, {Widget? icon}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Column(
@@ -164,10 +178,7 @@ class MachineInfoPanel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
-          Text(
-            value,
-            style: const TextStyle(fontSize: 14, color: PanoramaColors.ink),
-          ),
+          SystemValueLine(value: value, icon: icon),
         ],
       ),
     );
@@ -212,23 +223,37 @@ class _ProcessorRow extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      name,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: PanoramaColors.ink,
-                      ),
-                    ),
-                    if (architecture.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        architecture,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: PanoramaColors.muted,
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SystemIcons.cpu(name, arch: architecture),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                name,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  color: PanoramaColors.ink,
+                                ),
+                              ),
+                              if (architecture.isNotEmpty) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  architecture,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: PanoramaColors.muted,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -275,17 +300,31 @@ class _ProcessorDetail extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       children: [
-        Text(
-          info.name,
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SystemIcons.cpu(info.name, arch: info.arch, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    info.name,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                  if (info.arch.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      info.arch,
+                      style: const TextStyle(fontSize: 13, color: PanoramaColors.muted),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
         ),
-        if (info.arch.isNotEmpty) ...[
-          const SizedBox(height: 4),
-          Text(
-            info.arch,
-            style: const TextStyle(fontSize: 13, color: PanoramaColors.muted),
-          ),
-        ],
         const SizedBox(height: 18),
         for (final attr in info.attributes)
           Padding(
