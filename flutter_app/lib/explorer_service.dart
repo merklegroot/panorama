@@ -212,7 +212,9 @@ function run() {
       }
       entries.add(FileEntry(
         name: name,
-        path: path.isNotEmpty ? path : p.join(home, '.Trash', name),
+        path: path.isNotEmpty
+            ? path.replaceFirst(RegExp(r'/+$'), '')
+            : p.join(home, '.Trash', name),
         isDirectory: isDirectory,
         isSymbolicLink: false,
         size: size,
@@ -632,6 +634,59 @@ Get-CimInstance Win32_LogicalDisk |
     await Process.run('xdg-open', [p.dirname(targetPath)]);
   }
 
+  /// Label for opening the OS trash UI (Finder / Recycle Bin / file manager).
+  String get nativeTrashLabel {
+    if (Platform.isMacOS) return 'Open in Finder';
+    if (Platform.isWindows) return 'Open Recycle Bin';
+    return 'Open system Trash';
+  }
+
+  /// Open the system Trash / Recycle Bin in the native file manager.
+  Future<void> openNativeTrash() async {
+    if (Platform.isMacOS) {
+      final result = await Process.run('osascript', [
+        '-e',
+        'tell application "Finder"',
+        '-e',
+        'reopen',
+        '-e',
+        'activate',
+        '-e',
+        'open trash',
+        '-e',
+        'end tell',
+      ]).timeout(const Duration(seconds: 15));
+      if (result.exitCode != 0) {
+        final err = _macOsascriptError(result);
+        throw Exception(
+          err.isEmpty ? 'Could not open Trash in Finder.' : err,
+        );
+      }
+      return;
+    }
+    if (Platform.isWindows) {
+      final result = await Process.run('explorer.exe', [
+        'shell:RecycleBinFolder',
+      ]);
+      // explorer often returns 1 even on success
+      if (result.exitCode != 0 && result.exitCode != 1) {
+        throw Exception('Could not open the Recycle Bin.');
+      }
+      return;
+    }
+    var result = await Process.run('xdg-open', ['trash:///']);
+    if (result.exitCode != 0) {
+      final home = Platform.environment['HOME'] ?? '.';
+      result = await Process.run(
+        'xdg-open',
+        [p.join(home, '.local', 'share', 'Trash', 'files')],
+      );
+    }
+    if (result.exitCode != 0) {
+      throw Exception('Could not open the system Trash.');
+    }
+  }
+
   Future<List<OpenWithApp>> listOpenWithApps(String targetPath) async {
     if (!Platform.isMacOS || targetPath.isEmpty) return [];
 
@@ -857,17 +912,20 @@ function run(argv) {
     final script = '''
 function run(argv) {
   const finder = Application("Finder");
-  const targets = JSON.parse(argv[0]);
+  const targets = JSON.parse(argv[0]).map(function(p) {
+    return String(p).replace(/\\/\$/, "");
+  });
   const items = finder.trash.items();
   const errors = [];
   for (const wanted of targets) {
     let matched = null;
+    const wantedName = wanted.split("/").filter(Boolean).pop();
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       try {
-        const url = String(item.url());
-        const path = decodeURIComponent(url.replace(/^file:\\/\\/\\/?/, "/"));
-        if (path === wanted || path === decodeURIComponent(wanted)) {
+        let path = decodeURIComponent(String(item.url()).replace(/^file:\\/\\/\\/?/, "/"));
+        path = path.replace(/\\/\$/, "");
+        if (path === wanted || String(item.name()) === wantedName) {
           matched = item;
           break;
         }
@@ -888,9 +946,10 @@ function run(argv) {
   }
 }
 ''';
+    final normalized = paths.map(_stripTrailingSlashes).toList();
     final result = await Process.run(
       'osascript',
-      ['-l', 'JavaScript', '-e', script, jsonEncode(paths)],
+      ['-l', 'JavaScript', '-e', script, jsonEncode(normalized)],
     ).timeout(const Duration(seconds: 30));
     if (result.exitCode != 0) {
       final err = (result.stderr as String).trim();
@@ -968,45 +1027,129 @@ function run(argv) {
     }
   }
 
-  Future<void> _macDeletePermanently(List<String> paths) async {
-    final script = '''
-function run(argv) {
-  const finder = Application("Finder");
-  const targets = JSON.parse(argv[0]);
-  const items = finder.trash.items();
-  const toDelete = [];
-  for (const wanted of targets) {
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      try {
-        const url = String(item.url());
-        const path = decodeURIComponent(url.replace(/^file:\\/\\/\\/?/, "/"));
-        if (path === wanted || path === decodeURIComponent(wanted)) {
-          toDelete.push(item);
-          break;
-        }
-      } catch (e) {}
+  String _stripTrailingSlashes(String path) {
+    if (path.length <= 1) return path;
+    return path.replaceFirst(RegExp(r'/+$'), '');
+  }
+
+  String _macOsascriptError(ProcessResult result) {
+    final err = (result.stderr as String)
+        .split('\n')
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty && !line.contains('ApplePersistence='))
+        .join(' ');
+    if (err.isNotEmpty) return err;
+    return (result.stdout as String).trim();
+  }
+
+  bool _isUnderMacTrash(String path) {
+    final normalized = _stripTrailingSlashes(path);
+    final home = Platform.environment['HOME'];
+    if (home != null) {
+      final trash = p.join(home, '.Trash');
+      if (normalized == trash || p.isWithin(trash, normalized)) {
+        return true;
+      }
     }
+    // Volume trash: /.Trashes/<uid>/...
+    final parts = p.split(normalized);
+    final trashesIdx = parts.indexOf('.Trashes');
+    if (trashesIdx >= 0 && trashesIdx + 1 < parts.length) {
+      return true;
+    }
+    return false;
   }
-  if (toDelete.length) {
-    finder.delete(toDelete, {permanently: true});
+
+  Future<bool> _macPathExists(String path) async {
+    final result = await Process.run('/bin/test', ['-e', path]);
+    return result.exitCode == 0;
   }
-}
+
+  /// Deep link straight to System Settings → Privacy & Security → Full Disk
+  /// Access. Granting it to Panorama there is the one reliable, permanent
+  /// fix for TCC blocking `~/.Trash` unlinks (see `_macDeletePermanently`).
+  Future<void> openFullDiskAccessSettings() async {
+    await Process.run('open', [
+      'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles',
+    ]);
+  }
+
+  static const String _fullDiskAccessHint =
+      'Grant Panorama Full Disk Access in System Settings → Privacy & '
+      'Security → Full Disk Access, then try again.';
+
+  /// Permanently delete Trash items on macOS.
+  ///
+  /// Modern macOS TCC blocks unlinking `~/.Trash`, and Finder no longer
+  /// exposes `put away` / permanent-delete scripting (moves out of Trash
+  /// returns -5000). Try a normal `rm` first (silently works once Panorama
+  /// has Full Disk Access — no prompt needed). If that fails, try an admin
+  /// privilege escalation as a one-off fallback; if the item is *still*
+  /// there afterwards (some macOS versions keep `~/.Trash` protected even
+  /// from root), tell the user to grant Full Disk Access instead of retrying
+  /// forever.
+  Future<void> _macDeletePermanently(List<String> paths) async {
+    final targets = paths
+        .map(_stripTrailingSlashes)
+        .where((path) => path.isNotEmpty)
+        .toList();
+    if (targets.isEmpty) return;
+
+    final invalid = targets.where((path) => !_isUnderMacTrash(path)).toList();
+    if (invalid.isNotEmpty) {
+      throw Exception('Can only permanently delete items that are in Trash.');
+    }
+
+    final needPrivileged = <String>[];
+    for (final path in targets) {
+      await Process.run('/usr/bin/chflags', ['-R', 'nouchg,noschg', path]);
+      final rm = await Process.run('/bin/rm', ['-rf', '--', path]);
+      if (rm.exitCode != 0 || await _macPathExists(path)) {
+        needPrivileged.add(path);
+      }
+    }
+
+    if (needPrivileged.isEmpty) return;
+
+    const script = r'''
+on run argv
+  set cmd to "/bin/rm -rf --"
+  repeat with p in argv
+    set cmd to cmd & " " & quoted form of (p as text)
+  end repeat
+  do shell script cmd with administrator privileges
+end run
 ''';
+
     final result = await Process.run(
       'osascript',
-      ['-l', 'JavaScript', '-e', script, jsonEncode(paths)],
-    ).timeout(const Duration(seconds: 30));
+      ['-e', script, ...needPrivileged],
+    ).timeout(const Duration(seconds: 120));
+
     if (result.exitCode != 0) {
-      // Fallback: unlink paths directly.
-      for (final targetPath in paths) {
-        final type = await FileSystemEntity.type(targetPath, followLinks: false);
-        if (type == FileSystemEntityType.directory) {
-          await Directory(targetPath).delete(recursive: true);
-        } else if (type != FileSystemEntityType.notFound) {
-          await File(targetPath).delete();
-        }
+      final err = _macOsascriptError(result);
+      // User cancelled the auth dialog, or auth failed.
+      if (err.toLowerCase().contains('user canceled') ||
+          err.toLowerCase().contains('user cancelled') ||
+          err.contains('(-128)')) {
+        throw Exception('Permanent delete was cancelled.');
       }
+      throw Exception(
+        err.isEmpty
+            ? 'Couldn’t permanently delete. $_fullDiskAccessHint'
+            : 'Couldn’t permanently delete: $err',
+      );
+    }
+
+    // Some macOS versions keep `~/.Trash` protected even from an
+    // administrator shell — confirm the items are actually gone rather than
+    // trusting osascript's exit code.
+    final stillThere = <String>[];
+    for (final path in needPrivileged) {
+      if (await _macPathExists(path)) stillThere.add(p.basename(path));
+    }
+    if (stillThere.isNotEmpty) {
+      throw Exception('Couldn’t permanently delete. $_fullDiskAccessHint');
     }
   }
 

@@ -18,7 +18,15 @@ Future<void> main() async {
       size: const Size(1240, 780),
       minimumSize: const Size(850, 520),
       center: true,
-      backgroundColor: const Color(0xFFF6F7F9),
+      // A light/near-white WindowOptions.backgroundColor makes Windows render
+      // the native minimize/maximize/close glyphs in a color that blends into
+      // the title bar (invisible until hovered) — see
+      // https://github.com/leanflutter/window_manager/issues/576. Only set it
+      // on macOS, where it briefly shows behind the hidden title bar before
+      // Flutter's first paint; leave Windows/Linux on the default so their
+      // normal title bar renders correctly.
+      backgroundColor:
+          Platform.isMacOS ? const Color(0xFFF6F7F9) : null,
       skipTaskbar: false,
       // macOS uses a hidden title bar with native traffic lights; Linux/Windows
       // need a normal title bar for minimize / maximize / close.

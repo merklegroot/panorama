@@ -7,8 +7,8 @@ import 'models.dart';
 
 class AppController extends ChangeNotifier {
   AppController(this.api)
-      : left = FolderPaneController(api),
-        right = FolderPaneController(api);
+    : left = FolderPaneController(api),
+      right = FolderPaneController(api);
 
   final ExplorerService api;
   final FolderPaneController left;
@@ -48,6 +48,8 @@ class AppController extends ChangeNotifier {
   String terminalWorkingDirectory = '';
   int terminalSession = 0;
   int terminalCwdSync = 0;
+  String statusFlash = '';
+  int _statusFlashToken = 0;
 
   FolderPaneController get activePane =>
       activePaneId == PaneId.left ? left : right;
@@ -55,8 +57,9 @@ class AppController extends ChangeNotifier {
   FolderPaneController get otherPane =>
       activePaneId == PaneId.left ? right : left;
 
-  List<FileEntry> get selectedEntries =>
-      activePane.entries.where((e) => activePane.selected.contains(e.path)).toList();
+  List<FileEntry> get selectedEntries => activePane.entries
+      .where((e) => activePane.selected.contains(e.path))
+      .toList();
 
   List<ImprovementNote> get openNotes =>
       notes.where((n) => n.status == NoteStatus.open).toList();
@@ -70,8 +73,11 @@ class AppController extends ChangeNotifier {
     try {
       locations = await api.getLocations();
       final initial =
-          locations.where((l) => l.name == 'Home').map((l) => l.path).firstOrNull ??
-              (locations.isNotEmpty ? locations.first.path : '/');
+          locations
+              .where((l) => l.name == 'Home')
+              .map((l) => l.path)
+              .firstOrNull ??
+          (locations.isNotEmpty ? locations.first.path : '/');
       left.initPath(initial);
       right.initPath(initial);
       await loadNotes();
@@ -186,7 +192,9 @@ class AppController extends ChangeNotifier {
   }
 
   void openTerminalPanel({String? directory, bool restart = false}) {
-    final dir = (directory == null || directory.isEmpty) ? left.path : directory;
+    final dir = (directory == null || directory.isEmpty)
+        ? left.path
+        : directory;
     if (terminalOpen && terminalWorkingDirectory == dir && !restart) {
       if (terminalCollapsed) {
         terminalCollapsed = false;
@@ -325,6 +333,25 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void flashStatus(String message) {
+    statusFlash = message;
+    final token = ++_statusFlashToken;
+    notifyListeners();
+    Future<void>.delayed(const Duration(seconds: 5), () {
+      if (_statusFlashToken != token) return;
+      statusFlash = '';
+      notifyListeners();
+    });
+  }
+
+  void flashError(Object error, [StackTrace? stack]) {
+    debugPrint('panorama error: $error');
+    if (stack != null) {
+      debugPrint('$stack');
+    }
+    flashStatus(error.toString());
+  }
+
   Future<void> removeSelected() async {
     if (activePane.selected.isEmpty) return;
     try {
@@ -335,8 +362,8 @@ class AppController extends ChangeNotifier {
       }
       activePane.setSelected({});
       refreshAll();
-    } catch (reason) {
-      activePane.setError(reason.toString());
+    } catch (reason, stack) {
+      flashError(reason, stack);
     }
   }
 
@@ -348,8 +375,8 @@ class AppController extends ChangeNotifier {
       await api.restoreFromTrash(activePane.selected.toList());
       activePane.setSelected({});
       refreshAll();
-    } catch (reason) {
-      activePane.setError(reason.toString());
+    } catch (reason, stack) {
+      flashError(reason, stack);
     }
   }
 
@@ -359,8 +386,8 @@ class AppController extends ChangeNotifier {
       await api.deletePermanently(activePane.selected.toList());
       activePane.setSelected({});
       refreshAll();
-    } catch (reason) {
-      activePane.setError(reason.toString());
+    } catch (reason, stack) {
+      flashError(reason, stack);
     }
   }
 
@@ -369,8 +396,24 @@ class AppController extends ChangeNotifier {
       await api.emptyTrash();
       activePane.setSelected({});
       refreshAll();
-    } catch (reason) {
-      activePane.setError(reason.toString());
+    } catch (reason, stack) {
+      flashError(reason, stack);
+    }
+  }
+
+  Future<void> openNativeTrash() async {
+    try {
+      await api.openNativeTrash();
+    } catch (reason, stack) {
+      flashError(reason, stack);
+    }
+  }
+
+  Future<void> openFullDiskAccessSettings() async {
+    try {
+      await api.openFullDiskAccessSettings();
+    } catch (reason, stack) {
+      flashError(reason, stack);
     }
   }
 
@@ -388,7 +431,10 @@ class AppController extends ChangeNotifier {
     }
   }
 
-  Future<void> importExternalFiles(FolderPaneController pane, List<String> paths) async {
+  Future<void> importExternalFiles(
+    FolderPaneController pane,
+    List<String> paths,
+  ) async {
     if (pane.path.isEmpty || paths.isEmpty) return;
     try {
       final imported = await api.importPaths(paths, pane.path);
@@ -490,7 +536,9 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> saveEditNote() async {
-    if (editingNoteId == null || editingNoteBody.trim().isEmpty || savingNoteEdit) {
+    if (editingNoteId == null ||
+        editingNoteBody.trim().isEmpty ||
+        savingNoteEdit) {
       return;
     }
     savingNoteEdit = true;
@@ -577,7 +625,8 @@ class AppController extends ChangeNotifier {
   KeyEventResult handleKeyEvent(KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-    final meta = HardwareKeyboard.instance.isMetaPressed ||
+    final meta =
+        HardwareKeyboard.instance.isMetaPressed ||
         HardwareKeyboard.instance.isControlPressed;
 
     if (event.logicalKey == LogicalKeyboardKey.escape) {
@@ -644,7 +693,8 @@ class AppController extends ChangeNotifier {
       openNewWindow();
       return KeyEventResult.handled;
     }
-    if (event.logicalKey == LogicalKeyboardKey.enter && selectedEntries.length == 1) {
+    if (event.logicalKey == LogicalKeyboardKey.enter &&
+        selectedEntries.length == 1) {
       openEntryIn(activePane, selectedEntries.first);
       return KeyEventResult.handled;
     }

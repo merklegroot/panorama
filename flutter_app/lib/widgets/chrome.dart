@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../app_controller.dart';
@@ -67,6 +69,32 @@ class CommandBar extends StatelessWidget {
                       enabled: pane.entries.isNotEmpty,
                       onPressed: () => confirmEmptyTrash(context, controller),
                     ),
+                    const SizedBox(width: 4),
+                    TextButton(
+                      onPressed: controller.openNativeTrash,
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        foregroundColor: PanoramaColors.blue,
+                      ),
+                      child: Text(
+                        controller.api.nativeTrashLabel,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                    if (Platform.isMacOS)
+                      TextButton(
+                        onPressed: controller.openFullDiskAccessSettings,
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          foregroundColor: PanoramaColors.muted,
+                        ),
+                        child: const Text(
+                          'Grant Full Disk Access…',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
                   ] else ...[
                     _Tb(icon: Icons.content_cut, tip: 'Cut', enabled: hasSelection, onPressed: () => controller.copySelected(true)),
                     _Tb(icon: Icons.copy, tip: 'Copy', enabled: hasSelection, onPressed: () => controller.copySelected(false)),
@@ -335,6 +363,30 @@ class StatusBar extends StatelessWidget {
             '${pane.visibleEntries.length} ${pane.visibleEntries.length == 1 ? 'item' : 'items'}',
             style: const TextStyle(fontSize: 11, color: PanoramaColors.muted),
           ),
+          if (controller.statusFlash.isNotEmpty) ...[
+            const Text('  •  ', style: TextStyle(fontSize: 11, color: PanoramaColors.muted)),
+            Flexible(
+              child: Text(
+                controller.statusFlash,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 11, color: PanoramaColors.danger),
+              ),
+            ),
+            if (controller.statusFlash.contains('Full Disk Access')) ...[
+              const SizedBox(width: 6),
+              GestureDetector(
+                onTap: controller.openFullDiskAccessSettings,
+                child: const Text(
+                  'Open Settings',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: PanoramaColors.blue,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
+            ],
+          ],
           ValueListenableBuilder<Set<String>>(
             valueListenable: pane.selection,
             builder: (context, selected, _) {

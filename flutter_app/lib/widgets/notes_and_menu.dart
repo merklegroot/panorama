@@ -404,6 +404,11 @@ class ExplorerContextMenu extends StatelessWidget {
               count: pane.selected.length,
             );
           }, danger: true),
+          const Divider(height: 1),
+          _item(Icons.open_in_new, controller.api.nativeTrashLabel, () {
+            controller.hideContextMenu();
+            controller.openNativeTrash();
+          }),
         ],
       );
     }
@@ -510,6 +515,10 @@ class ExplorerContextMenu extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          _item(Icons.open_in_new, controller.api.nativeTrashLabel, () {
+            controller.hideContextMenu();
+            controller.openNativeTrash();
+          }),
           _item(Icons.delete_sweep_outlined, 'Empty Trash', () {
             controller.hideContextMenu();
             confirmEmptyTrash(context, controller);
