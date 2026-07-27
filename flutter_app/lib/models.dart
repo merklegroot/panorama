@@ -184,3 +184,24 @@ class MachineInfo {
   final String username;
   final List<DiskVolume> disks;
 }
+
+class ProcessorAttribute {
+  const ProcessorAttribute({required this.label, required this.value});
+
+  final String label;
+  final String value;
+}
+
+class ProcessorInfo {
+  const ProcessorInfo({
+    required this.name,
+    required this.arch,
+    this.attributes = const [],
+  });
+
+  final String name;
+  final String arch;
+  final List<ProcessorAttribute> attributes;
+}
+
+enum MachineInfoPage { overview, processor }

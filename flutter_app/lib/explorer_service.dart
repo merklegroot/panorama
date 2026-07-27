@@ -628,6 +628,196 @@ Get-CimInstance Win32_LogicalDisk |
     );
   }
 
+  Future<ProcessorInfo> getProcessorInfo() async {
+    if (Platform.isMacOS) return _macProcessorInfo();
+    if (Platform.isWindows) return _windowsProcessorInfo();
+    return _linuxProcessorInfo();
+  }
+
+  Future<String> _sysctl(String key) async {
+    final result = await Process.run('sysctl', ['-n', key]);
+    if (result.exitCode != 0) return '';
+    return (result.stdout as String).trim();
+  }
+
+  Future<ProcessorInfo> _macProcessorInfo() async {
+    final name = await _sysctl('machdep.cpu.brand_string');
+    final arch = (await Process.run('uname', ['-m'])).stdout.toString().trim();
+    final physical = int.tryParse(await _sysctl('hw.physicalcpu')) ?? 0;
+    final logical = int.tryParse(await _sysctl('hw.logicalcpu')) ?? 0;
+    final perfPhysical =
+        int.tryParse(await _sysctl('hw.perflevel0.physicalcpu')) ?? 0;
+    final effPhysical =
+        int.tryParse(await _sysctl('hw.perflevel1.physicalcpu')) ?? 0;
+    final l1d = int.tryParse(await _sysctl('hw.l1dcachesize')) ?? 0;
+    final l1i = int.tryParse(await _sysctl('hw.l1icachesize')) ?? 0;
+    final l2 = int.tryParse(await _sysctl('hw.l2cachesize')) ?? 0;
+    final l3 = int.tryParse(await _sysctl('hw.l3cachesize')) ?? 0;
+
+    final attrs = <ProcessorAttribute>[
+      if (perfPhysical > 0 || effPhysical > 0) ...[
+        if (perfPhysical > 0)
+          ProcessorAttribute(
+            label: 'Performance cores',
+            value: '$perfPhysical',
+          ),
+        if (effPhysical > 0)
+          ProcessorAttribute(
+            label: 'Efficiency cores',
+            value: '$effPhysical',
+          ),
+        if (physical > 0 && physical != perfPhysical + effPhysical)
+          ProcessorAttribute(label: 'Cores', value: '$physical'),
+      ] else if (physical > 0)
+        ProcessorAttribute(label: 'Cores', value: '$physical'),
+      if (logical > 0 && logical != physical)
+        ProcessorAttribute(label: 'Threads', value: '$logical'),
+      if (l1i > 0)
+        ProcessorAttribute(label: 'L1 instruction cache', value: formatSize(l1i, false)),
+      if (l1d > 0)
+        ProcessorAttribute(label: 'L1 data cache', value: formatSize(l1d, false)),
+      if (l2 > 0)
+        ProcessorAttribute(label: 'L2 cache', value: formatSize(l2, false)),
+      if (l3 > 0)
+        ProcessorAttribute(label: 'L3 cache', value: formatSize(l3, false)),
+    ];
+
+    return ProcessorInfo(
+      name: name.isEmpty ? 'Unknown' : name,
+      arch: arch,
+      attributes: attrs,
+    );
+  }
+
+  Future<ProcessorInfo> _windowsProcessorInfo() async {
+    final result = await Process.run('powershell', [
+      '-NoProfile',
+      '-Command',
+      r'''
+$cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
+if ($null -eq $cpu) { return }
+$name = $cpu.Name
+$arch = switch ($cpu.Architecture) {
+  0 { 'x86' }
+  5 { 'ARM' }
+  9 { 'x86_64' }
+  12 { 'ARM64' }
+  default { "$($cpu.Architecture)" }
+}
+$cores = $cpu.NumberOfCores
+$threads = $cpu.NumberOfLogicalProcessors
+$maxClock = $cpu.MaxClockSpeed
+$l2 = $cpu.L2CacheSize
+$l3 = $cpu.L3CacheSize
+"{0}`t{1}`t{2}`t{3}`t{4}`t{5}`t{6}" -f $name, $arch, $cores, $threads, $maxClock, $l2, $l3
+''',
+    ]);
+    final line = (result.stdout as String)
+        .split('\n')
+        .map((l) => l.trim())
+        .firstWhere((l) => l.isNotEmpty, orElse: () => '');
+    if (line.isEmpty || result.exitCode != 0) {
+      final arch = Platform.environment['PROCESSOR_ARCHITECTURE'] ?? '';
+      final name = Platform.environment['PROCESSOR_IDENTIFIER'] ?? arch;
+      final threads =
+          int.tryParse(Platform.environment['NUMBER_OF_PROCESSORS'] ?? '') ?? 0;
+      return ProcessorInfo(
+        name: name.isEmpty ? 'Unknown' : name,
+        arch: arch,
+        attributes: [
+          if (threads > 0)
+            ProcessorAttribute(label: 'Threads', value: '$threads'),
+        ],
+      );
+    }
+    final parts = line.split('\t');
+    final name = parts.isNotEmpty ? parts[0] : 'Unknown';
+    final arch = parts.length > 1 ? parts[1] : '';
+    final cores = parts.length > 2 ? int.tryParse(parts[2]) ?? 0 : 0;
+    final threads = parts.length > 3 ? int.tryParse(parts[3]) ?? 0 : 0;
+    final maxClock = parts.length > 4 ? int.tryParse(parts[4]) ?? 0 : 0;
+    final l2Kb = parts.length > 5 ? int.tryParse(parts[5]) ?? 0 : 0;
+    final l3Kb = parts.length > 6 ? int.tryParse(parts[6]) ?? 0 : 0;
+    return ProcessorInfo(
+      name: name,
+      arch: arch,
+      attributes: [
+        if (cores > 0) ProcessorAttribute(label: 'Cores', value: '$cores'),
+        if (threads > 0 && threads != cores)
+          ProcessorAttribute(label: 'Threads', value: '$threads'),
+        if (maxClock > 0)
+          ProcessorAttribute(
+            label: 'Max clock',
+            value: maxClock >= 1000
+                ? '${(maxClock / 1000).toStringAsFixed(2)} GHz'
+                : '$maxClock MHz',
+          ),
+        if (l2Kb > 0)
+          ProcessorAttribute(label: 'L2 cache', value: formatSize(l2Kb * 1024, false)),
+        if (l3Kb > 0)
+          ProcessorAttribute(label: 'L3 cache', value: formatSize(l3Kb * 1024, false)),
+      ],
+    );
+  }
+
+  Future<ProcessorInfo> _linuxProcessorInfo() async {
+    final arch = (await Process.run('uname', ['-m'])).stdout.toString().trim();
+    var name = '';
+    var vendor = '';
+    var cores = 0;
+    var threads = 0;
+    var cache = '';
+    var mhz = '';
+    try {
+      final cpuinfo = await File('/proc/cpuinfo').readAsString();
+      String field(String key) {
+        final line = cpuinfo
+            .split('\n')
+            .firstWhere((l) => l.startsWith(key), orElse: () => '');
+        if (!line.contains(':')) return '';
+        return line.split(':').skip(1).join(':').trim();
+      }
+
+      name = field('model name');
+      if (name.isEmpty) name = field('Hardware');
+      if (name.isEmpty) name = field('cpu model');
+      vendor = field('vendor_id');
+      cores = int.tryParse(field('cpu cores')) ?? 0;
+      threads = int.tryParse(field('siblings')) ?? 0;
+      cache = field('cache size');
+      mhz = field('cpu MHz');
+      if (threads == 0) {
+        threads = RegExp(r'^processor\s*:', multiLine: true)
+            .allMatches(cpuinfo)
+            .length;
+      }
+    } catch (_) {}
+
+    String? clockLabel;
+    if (mhz.isNotEmpty) {
+      final mhzVal = double.tryParse(mhz);
+      clockLabel = mhzVal != null && mhzVal >= 1000
+          ? '${(mhzVal / 1000).toStringAsFixed(2)} GHz'
+          : '$mhz MHz';
+    }
+
+    return ProcessorInfo(
+      name: name.isEmpty ? (arch.isEmpty ? 'Unknown' : arch) : name,
+      arch: arch,
+      attributes: [
+        if (vendor.isNotEmpty)
+          ProcessorAttribute(label: 'Vendor', value: vendor),
+        if (cores > 0) ProcessorAttribute(label: 'Cores', value: '$cores'),
+        if (threads > 0 && threads != cores)
+          ProcessorAttribute(label: 'Threads', value: '$threads'),
+        if (clockLabel != null)
+          ProcessorAttribute(label: 'Clock', value: clockLabel),
+        if (cache.isNotEmpty)
+          ProcessorAttribute(label: 'Cache', value: cache),
+      ],
+    );
+  }
+
   Future<void> openTerminal(String directoryPath) async {
     final dir = directoryPath.isEmpty ? (Platform.environment['HOME'] ?? '.') : directoryPath;
     if (Platform.isMacOS) {

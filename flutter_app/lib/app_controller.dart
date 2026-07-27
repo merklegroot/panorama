@@ -40,9 +40,13 @@ class AppController extends ChangeNotifier {
   bool openWithLoading = false;
   bool _dualPaneUsedThisSession = false;
   bool machineInfoOpen = false;
+  MachineInfoPage machineInfoPage = MachineInfoPage.overview;
   MachineInfo? machineInfo;
   bool machineInfoLoading = false;
   String machineInfoError = '';
+  ProcessorInfo? processorInfo;
+  bool processorInfoLoading = false;
+  String processorInfoError = '';
   DiskUsage? diskUsage;
   String _diskUsageForPath = '';
   StreamSubscription<void>? _volumeWatch;
@@ -254,8 +258,12 @@ class AppController extends ChangeNotifier {
   Future<void> openMachineInfo() async {
     closeNotesPanel();
     machineInfoOpen = true;
+    machineInfoPage = MachineInfoPage.overview;
     machineInfoLoading = true;
     machineInfoError = '';
+    processorInfo = null;
+    processorInfoError = '';
+    processorInfoLoading = false;
     notifyListeners();
     try {
       machineInfo = await api.getMachineInfo();
@@ -273,6 +281,10 @@ class AppController extends ChangeNotifier {
     if (!machineInfoOpen) return;
     _stopVolumeWatch();
     machineInfoOpen = false;
+    machineInfoPage = MachineInfoPage.overview;
+    processorInfo = null;
+    processorInfoError = '';
+    processorInfoLoading = false;
     notifyListeners();
   }
 
@@ -281,6 +293,32 @@ class AppController extends ChangeNotifier {
       closeMachineInfo();
     } else {
       openMachineInfo();
+    }
+  }
+
+  void showMachineInfoOverview() {
+    if (!machineInfoOpen) return;
+    machineInfoPage = MachineInfoPage.overview;
+    notifyListeners();
+  }
+
+  Future<void> showProcessorInfo() async {
+    if (!machineInfoOpen) return;
+    machineInfoPage = MachineInfoPage.processor;
+    if (processorInfo != null && processorInfoError.isEmpty) {
+      notifyListeners();
+      return;
+    }
+    processorInfoLoading = true;
+    processorInfoError = '';
+    notifyListeners();
+    try {
+      processorInfo = await api.getProcessorInfo();
+    } catch (reason) {
+      processorInfoError = reason.toString();
+    } finally {
+      processorInfoLoading = false;
+      notifyListeners();
     }
   }
 
@@ -681,7 +719,11 @@ class AppController extends ChangeNotifier {
         return KeyEventResult.handled;
       }
       if (machineInfoOpen) {
-        closeMachineInfo();
+        if (machineInfoPage != MachineInfoPage.overview) {
+          showMachineInfoOverview();
+        } else {
+          closeMachineInfo();
+        }
         return KeyEventResult.handled;
       }
       if (notesOpen) {

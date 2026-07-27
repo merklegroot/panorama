@@ -12,6 +12,7 @@ class MachineInfoPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final onProcessor = controller.machineInfoPage == MachineInfoPage.processor;
     final info = controller.machineInfo;
 
     return Positioned.fill(
@@ -34,21 +35,37 @@ class MachineInfoPanel extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 18, 12, 8),
+                          padding: const EdgeInsets.fromLTRB(12, 14, 12, 8),
                           child: Row(
                             children: [
-                              const Expanded(
+                              if (onProcessor)
+                                IconButton(
+                                  tooltip: 'Back',
+                                  onPressed: controller.showMachineInfoOverview,
+                                  icon: const Icon(Icons.arrow_back),
+                                )
+                              else
+                                const SizedBox(width: 8),
+                              Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'System',
-                                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                                      onProcessor ? 'Processor' : 'System',
+                                      style: const TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w700,
+                                      ),
                                     ),
-                                    SizedBox(height: 4),
+                                    const SizedBox(height: 4),
                                     Text(
-                                      'Basic info about this machine.',
-                                      style: TextStyle(fontSize: 13, color: PanoramaColors.muted),
+                                      onProcessor
+                                          ? 'Details about this CPU.'
+                                          : 'Basic info about this machine.',
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        color: PanoramaColors.muted,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -61,11 +78,11 @@ class MachineInfoPanel extends StatelessWidget {
                             ],
                           ),
                         ),
-                        if (controller.machineInfoLoading)
+                        if (!onProcessor && controller.machineInfoLoading)
                           const Expanded(
                             child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
                           )
-                        else if (controller.machineInfoError.isNotEmpty)
+                        else if (!onProcessor && controller.machineInfoError.isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.all(20),
                             child: Text(
@@ -73,6 +90,8 @@ class MachineInfoPanel extends StatelessWidget {
                               style: const TextStyle(color: PanoramaColors.danger, fontSize: 13),
                             ),
                           )
+                        else if (onProcessor)
+                          Expanded(child: _ProcessorDetail(controller: controller))
                         else if (info != null)
                           Expanded(
                             child: ListView(
@@ -81,8 +100,11 @@ class MachineInfoPanel extends StatelessWidget {
                                 _row('Name', info.hostname),
                                 _row('User', info.username.isEmpty ? '—' : info.username),
                                 _row('OS', '${info.osName} ${info.osVersion}'.trim()),
-                                _row('Processor', info.cpu),
-                                _row('Architecture', info.arch),
+                                _ProcessorRow(
+                                  cpu: info.cpu,
+                                  arch: info.arch,
+                                  onTap: controller.showProcessorInfo,
+                                ),
                                 _row(
                                   'Memory',
                                   info.memoryBytes > 0
@@ -148,6 +170,151 @@ class MachineInfoPanel extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ProcessorRow extends StatelessWidget {
+  const _ProcessorRow({
+    required this.cpu,
+    required this.arch,
+    required this.onTap,
+  });
+
+  final String cpu;
+  final String arch;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = cpu.trim().isEmpty ? '—' : cpu.trim();
+    final architecture = arch.trim();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Processor',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: PanoramaColors.blue,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: PanoramaColors.ink,
+                      ),
+                    ),
+                    if (architecture.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        architecture,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: PanoramaColors.muted,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.only(top: 14),
+                child: Icon(
+                  Icons.chevron_right,
+                  size: 18,
+                  color: PanoramaColors.muted,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProcessorDetail extends StatelessWidget {
+  const _ProcessorDetail({required this.controller});
+
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    if (controller.processorInfoLoading) {
+      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+    }
+    if (controller.processorInfoError.isNotEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(20),
+        child: Text(
+          controller.processorInfoError,
+          style: const TextStyle(color: PanoramaColors.danger, fontSize: 13),
+        ),
+      );
+    }
+    final info = controller.processorInfo;
+    if (info == null) {
+      return const SizedBox.shrink();
+    }
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      children: [
+        Text(
+          info.name,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+        if (info.arch.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(
+            info.arch,
+            style: const TextStyle(fontSize: 13, color: PanoramaColors.muted),
+          ),
+        ],
+        const SizedBox(height: 18),
+        for (final attr in info.attributes)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  attr.label,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: PanoramaColors.muted,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  attr.value,
+                  style: const TextStyle(fontSize: 14, color: PanoramaColors.ink),
+                ),
+              ],
+            ),
+          ),
+        if (info.attributes.isEmpty)
+          const Text(
+            'No additional details available.',
+            style: TextStyle(fontSize: 13, color: PanoramaColors.muted),
+          ),
+      ],
     );
   }
 }
