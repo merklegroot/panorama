@@ -18,6 +18,8 @@ class AppController extends ChangeNotifier {
 
   List<LocationItem> locations = [];
   bool dualPane = false;
+  bool previewOpen = true;
+  double previewWidth = 280;
   PaneId activePaneId = PaneId.left;
   ViewMode view = ViewMode.list;
   double sidebarWidth = 180;
@@ -176,6 +178,16 @@ class AppController extends ChangeNotifier {
       activePaneId = PaneId.left;
       dualPane = false;
     }
+    notifyListeners();
+  }
+
+  void togglePreview() {
+    previewOpen = !previewOpen;
+    notifyListeners();
+  }
+
+  void setPreviewWidth(double width) {
+    previewWidth = width.clamp(200.0, 480.0);
     notifyListeners();
   }
 

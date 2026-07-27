@@ -145,6 +145,12 @@ class CommandBar extends StatelessWidget {
             toggled: controller.dualPane,
             onPressed: controller.toggleDualPane,
           ),
+          _Tb(
+            icon: Icons.preview_outlined,
+            tip: controller.previewOpen ? 'Hide preview' : 'Show preview',
+            toggled: controller.previewOpen,
+            onPressed: controller.togglePreview,
+          ),
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 4),
             decoration: BoxDecoration(

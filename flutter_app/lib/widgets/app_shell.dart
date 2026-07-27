@@ -7,6 +7,7 @@ import 'chrome.dart';
 import 'folder_pane.dart';
 import 'machine_info_panel.dart';
 import 'notes_and_menu.dart';
+import 'preview_pane.dart';
 import 'sidebar.dart';
 import 'terminal_panel.dart';
 
@@ -58,36 +59,51 @@ class AppShell extends StatelessWidget {
                         TitleBar(controller: controller),
                         CommandBar(controller: controller),
                         Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
-                            child: controller.dualPane
-                                ? Row(
-                                    children: [
-                                      Expanded(
-                                        child: FolderPaneView(
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Padding(
+                                  padding: EdgeInsets.fromLTRB(
+                                    8,
+                                    0,
+                                    controller.previewOpen ? 0 : 8,
+                                    0,
+                                  ),
+                                  child: controller.dualPane
+                                      ? Row(
+                                          children: [
+                                            Expanded(
+                                              child: FolderPaneView(
+                                                controller: controller,
+                                                pane: controller.left,
+                                                paneId: PaneId.left,
+                                                showChrome: true,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Expanded(
+                                              child: FolderPaneView(
+                                                controller: controller,
+                                                pane: controller.right,
+                                                paneId: PaneId.right,
+                                                showChrome: true,
+                                              ),
+                                            ),
+                                          ],
+                                        )
+                                      : FolderPaneView(
                                           controller: controller,
                                           pane: controller.left,
                                           paneId: PaneId.left,
-                                          showChrome: true,
+                                          showChrome: false,
                                         ),
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Expanded(
-                                        child: FolderPaneView(
-                                          controller: controller,
-                                          pane: controller.right,
-                                          paneId: PaneId.right,
-                                          showChrome: true,
-                                        ),
-                                      ),
-                                    ],
-                                  )
-                                : FolderPaneView(
-                                    controller: controller,
-                                    pane: controller.left,
-                                    paneId: PaneId.left,
-                                    showChrome: false,
-                                  ),
+                                ),
+                              ),
+                              if (controller.previewOpen) ...[
+                                PreviewResizeHandle(controller: controller),
+                                PreviewPane(controller: controller),
+                              ],
+                            ],
                           ),
                         ),
                         if (controller.terminalOpen)
