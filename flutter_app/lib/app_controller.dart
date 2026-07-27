@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
@@ -43,6 +45,7 @@ class AppController extends ChangeNotifier {
   String machineInfoError = '';
   DiskUsage? diskUsage;
   String _diskUsageForPath = '';
+  StreamSubscription<void>? _volumeWatch;
   bool terminalOpen = false;
   bool terminalCollapsed = false;
   String terminalWorkingDirectory = '';
@@ -123,6 +126,7 @@ class AppController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _stopVolumeWatch();
     left.removeListener(_onPaneChanged);
     right.removeListener(_onPaneChanged);
     left.dispose();
@@ -255,8 +259,10 @@ class AppController extends ChangeNotifier {
     notifyListeners();
     try {
       machineInfo = await api.getMachineInfo();
+      _startVolumeWatch();
     } catch (reason) {
       machineInfoError = reason.toString();
+      _stopVolumeWatch();
     } finally {
       machineInfoLoading = false;
       notifyListeners();
@@ -265,6 +271,7 @@ class AppController extends ChangeNotifier {
 
   void closeMachineInfo() {
     if (!machineInfoOpen) return;
+    _stopVolumeWatch();
     machineInfoOpen = false;
     notifyListeners();
   }
@@ -274,6 +281,45 @@ class AppController extends ChangeNotifier {
       closeMachineInfo();
     } else {
       openMachineInfo();
+    }
+  }
+
+  void _startVolumeWatch() {
+    _stopVolumeWatch();
+    _volumeWatch = api.watchVolumeChanges().listen((_) {
+      unawaited(_refreshMachineInfoDisks());
+    });
+  }
+
+  void _stopVolumeWatch() {
+    _volumeWatch?.cancel();
+    _volumeWatch = null;
+  }
+
+  Future<void> _refreshMachineInfoDisks() async {
+    final current = machineInfo;
+    if (!machineInfoOpen || current == null) return;
+    try {
+      final disks = await api.getDiskVolumes();
+      if (!machineInfoOpen || machineInfo == null) return;
+      final previous = machineInfo!.disks.map((d) => d.mountPoint).toSet();
+      final next = disks.map((d) => d.mountPoint).toSet();
+      if (previous.length == next.length && previous.containsAll(next)) {
+        return;
+      }
+      machineInfo = MachineInfo(
+        hostname: current.hostname,
+        osName: current.osName,
+        osVersion: current.osVersion,
+        arch: current.arch,
+        cpu: current.cpu,
+        memoryBytes: current.memoryBytes,
+        username: current.username,
+        disks: disks,
+      );
+      notifyListeners();
+    } catch (_) {
+      // Keep the last successful snapshot if a refresh fails.
     }
   }
 

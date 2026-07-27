@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -272,6 +273,89 @@ function run() {
     } catch (_) {
       return const [];
     }
+  }
+
+  /// Stable signature of currently mounted volumes (mount points only).
+  Future<String> volumeMountFingerprint() async {
+    final mounts = (await getDiskVolumes()).map((v) => v.mountPoint).toList()
+      ..sort();
+    return mounts.join('\n');
+  }
+
+  /// Emits whenever a volume is mounted or unmounted.
+  ///
+  /// Uses directory watches where available (e.g. `/Volumes` on macOS) plus a
+  /// short poll so ejects that don't produce filesystem events are still seen.
+  Stream<void> watchVolumeChanges({
+    Duration pollInterval = const Duration(seconds: 2),
+  }) {
+    late final StreamController<void> controller;
+    final subs = <StreamSubscription<dynamic>>[];
+    Timer? poll;
+    Timer? debounce;
+    String? lastFingerprint;
+    var checking = false;
+
+    Future<void> check() async {
+      if (checking || controller.isClosed) return;
+      checking = true;
+      try {
+        final fingerprint = await volumeMountFingerprint();
+        if (controller.isClosed) return;
+        if (lastFingerprint == null) {
+          lastFingerprint = fingerprint;
+          return;
+        }
+        if (fingerprint == lastFingerprint) return;
+        lastFingerprint = fingerprint;
+        controller.add(null);
+      } catch (_) {
+        // Ignore transient df / permission failures while watching.
+      } finally {
+        checking = false;
+      }
+    }
+
+    void scheduleCheck() {
+      debounce?.cancel();
+      debounce = Timer(const Duration(milliseconds: 350), check);
+    }
+
+    controller = StreamController<void>(
+      onListen: () async {
+        await check();
+        for (final path in _volumeWatchDirectories()) {
+          final dir = Directory(path);
+          if (!await dir.exists()) continue;
+          try {
+            subs.add(dir.watch(recursive: false).listen((_) => scheduleCheck()));
+          } catch (_) {}
+        }
+        poll = Timer.periodic(pollInterval, (_) => scheduleCheck());
+      },
+      onCancel: () async {
+        debounce?.cancel();
+        poll?.cancel();
+        for (final sub in subs) {
+          await sub.cancel();
+        }
+        subs.clear();
+      },
+    );
+    return controller.stream;
+  }
+
+  List<String> _volumeWatchDirectories() {
+    if (Platform.isMacOS) return const ['/Volumes'];
+    if (Platform.isWindows) return const [];
+    final home = Platform.environment['HOME'] ?? '';
+    return [
+      '/media',
+      '/mnt',
+      '/run/media',
+      if (home.isNotEmpty) p.join('/media', p.basename(home)),
+      if (home.isNotEmpty) p.join('/run/media', p.basename(home)),
+    ];
   }
 
   Future<List<DiskVolume>> _windowsDiskVolumes() async {
