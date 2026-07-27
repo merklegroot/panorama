@@ -87,7 +87,7 @@ class Sidebar extends StatelessWidget {
                 const _NavLabel('Locations'),
                 _NavItem(
                   icon: Icons.computer_outlined,
-                  label: 'Macintosh HD',
+                  label: controller.api.rootLocationLabel,
                   active: pane.path == '/',
                   onTap: () => pane.navigate('/'),
                 ),

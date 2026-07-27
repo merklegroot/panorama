@@ -634,6 +634,14 @@ Get-CimInstance Win32_LogicalDisk |
     await Process.run('xdg-open', [p.dirname(targetPath)]);
   }
 
+  /// Label for the filesystem-root entry in the sidebar's "Locations" list.
+  /// Matches each OS's own naming convention instead of assuming macOS.
+  String get rootLocationLabel {
+    if (Platform.isMacOS) return 'Macintosh HD';
+    if (Platform.isWindows) return 'This PC';
+    return 'Computer';
+  }
+
   /// Label for opening the OS trash UI (Finder / Recycle Bin / file manager).
   String get nativeTrashLabel {
     if (Platform.isMacOS) return 'Open in Finder';
