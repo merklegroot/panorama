@@ -334,20 +334,7 @@ class _FolderPaneViewState extends State<FolderPaneView> {
     final entries = pane.visibleEntries;
     return Column(
       children: [
-        Container(
-          height: 28,
-          decoration: const BoxDecoration(
-            border: Border(bottom: BorderSide(color: PanoramaColors.line)),
-          ),
-          child: Row(
-            children: [
-              _sortHeader('Name', SortKey.name, flex: 4),
-              _sortHeader('Date modified', SortKey.modified, flex: 3),
-              _sortHeader('Type', SortKey.type, flex: 2),
-              _sortHeader('Size', SortKey.size, flex: 1),
-            ],
-          ),
-        ),
+        _ColumnHeaderBar(pane: pane),
         Expanded(
           child: MarqueeSelectArea(
             entries: entries,
@@ -398,30 +385,6 @@ class _FolderPaneViewState extends State<FolderPaneView> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _sortHeader(String label, SortKey key, {required int flex}) {
-    final active = pane.sortKey == key;
-    return Expanded(
-      flex: flex,
-      child: InkWell(
-        onTap: () => pane.setSortKey(key),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          child: Row(
-            children: [
-              Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: PanoramaColors.muted)),
-              if (active)
-                Icon(
-                  pane.sortAscending ? Icons.arrow_upward : Icons.arrow_downward,
-                  size: 12,
-                  color: PanoramaColors.muted,
-                ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 
@@ -479,6 +442,291 @@ class _FolderPaneViewState extends State<FolderPaneView> {
           },
         );
       },
+    );
+  }
+}
+
+/// Pixel widths for list columns from the pane's stored sizes.
+Map<SortKey, double> _resolvedColumnWidths(FolderPaneController pane) {
+  return {
+    for (final key in pane.columnOrder) key: pane.widthForColumn(key),
+  };
+}
+
+class _ColumnHeaderBar extends StatefulWidget {
+  const _ColumnHeaderBar({required this.pane});
+
+  final FolderPaneController pane;
+
+  @override
+  State<_ColumnHeaderBar> createState() => _ColumnHeaderBarState();
+}
+
+class _ColumnHeaderBarState extends State<_ColumnHeaderBar> {
+  SortKey? _dragging;
+  SortKey? _hoverTarget;
+  bool _hoverBefore = true;
+
+  FolderPaneController get pane => widget.pane;
+
+  void _onReorderDrop(SortKey from, SortKey to, {required bool before}) {
+    final order = pane.columnOrder;
+    final oldIndex = order.indexOf(from);
+    var newIndex = order.indexOf(to);
+    if (oldIndex < 0 || newIndex < 0 || from == to) return;
+    if (!before) newIndex += 1;
+    pane.reorderColumn(oldIndex, newIndex);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: pane,
+      builder: (context, _) {
+        return Container(
+          height: 28,
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: PanoramaColors.line)),
+          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final order = pane.columnOrder;
+              final widths = _resolvedColumnWidths(pane);
+              // Stretch the final column so the header fills the pane width.
+              final used =
+                  widths.values.fold<double>(0, (sum, w) => sum + w);
+              if (order.isNotEmpty && constraints.maxWidth > used) {
+                final last = order.last;
+                widths[last] =
+                    widths[last]! + (constraints.maxWidth - used);
+              }
+              return Row(
+                children: [
+                  for (var i = 0; i < order.length; i++)
+                    _HeaderCell(
+                      columnKey: order[i],
+                      width: widths[order[i]]!,
+                      pane: pane,
+                      dragging: _dragging,
+                      hoverTarget: _hoverTarget,
+                      hoverBefore: _hoverBefore,
+                      onDragStarted: () => setState(() => _dragging = order[i]),
+                      onDragEnded: () => setState(() {
+                        _dragging = null;
+                        _hoverTarget = null;
+                      }),
+                      onHover: (target, before) {
+                        if (_hoverTarget == target && _hoverBefore == before) {
+                          return;
+                        }
+                        setState(() {
+                          _hoverTarget = target;
+                          _hoverBefore = before;
+                        });
+                      },
+                      onLeave: (target) {
+                        if (_hoverTarget == target) {
+                          setState(() => _hoverTarget = null);
+                        }
+                      },
+                      onAccept: (from, to, before) {
+                        _onReorderDrop(from, to, before: before);
+                        setState(() {
+                          _dragging = null;
+                          _hoverTarget = null;
+                        });
+                      },
+                      onResize: i == order.length - 1
+                          ? null
+                          : (delta) {
+                              pane.resizeColumnEdge(
+                                order[i],
+                                order[i + 1],
+                                delta,
+                              );
+                            },
+                    ),
+                ],
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _HeaderCell extends StatelessWidget {
+  const _HeaderCell({
+    required this.columnKey,
+    required this.width,
+    required this.pane,
+    required this.dragging,
+    required this.hoverTarget,
+    required this.hoverBefore,
+    required this.onDragStarted,
+    required this.onDragEnded,
+    required this.onHover,
+    required this.onLeave,
+    required this.onAccept,
+    required this.onResize,
+  });
+
+  final SortKey columnKey;
+  final double width;
+  final FolderPaneController pane;
+  final SortKey? dragging;
+  final SortKey? hoverTarget;
+  final bool hoverBefore;
+  final VoidCallback onDragStarted;
+  final VoidCallback onDragEnded;
+  final void Function(SortKey target, bool before) onHover;
+  final void Function(SortKey target) onLeave;
+  final void Function(SortKey from, SortKey to, bool before) onAccept;
+  final void Function(double delta)? onResize;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = pane.sortKey == columnKey;
+    final label = FolderPaneController.columnLabels[columnKey]!;
+    final showInsert =
+        dragging != null && dragging != columnKey && hoverTarget == columnKey;
+
+    return SizedBox(
+      width: width,
+      child: DragTarget<SortKey>(
+        onWillAcceptWithDetails: (details) => details.data != columnKey,
+        onMove: (details) {
+          final box = context.findRenderObject() as RenderBox?;
+          if (box == null || !box.hasSize) return;
+          final local = box.globalToLocal(details.offset);
+          onHover(columnKey, local.dx < box.size.width / 2);
+        },
+        onLeave: (_) => onLeave(columnKey),
+        onAcceptWithDetails: (details) {
+          onAccept(details.data, columnKey, hoverBefore);
+        },
+        builder: (context, candidate, rejected) {
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              if (showInsert && hoverBefore)
+                const Positioned(
+                  left: 0,
+                  top: 2,
+                  bottom: 2,
+                  child: VerticalDivider(
+                    width: 2,
+                    thickness: 2,
+                    color: PanoramaColors.blue,
+                  ),
+                ),
+              if (showInsert && !hoverBefore)
+                const Positioned(
+                  right: 0,
+                  top: 2,
+                  bottom: 2,
+                  child: VerticalDivider(
+                    width: 2,
+                    thickness: 2,
+                    color: PanoramaColors.blue,
+                  ),
+                ),
+              Positioned.fill(
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.grab,
+                  child: Draggable<SortKey>(
+                    data: columnKey,
+                    onDragStarted: onDragStarted,
+                    onDragEnd: (_) => onDragEnded(),
+                    onDraggableCanceled: (_, _) => onDragEnded(),
+                    feedback: Material(
+                      elevation: 3,
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(4),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        child: Text(
+                          label,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: PanoramaColors.ink,
+                          ),
+                        ),
+                      ),
+                    ),
+                    childWhenDragging: Opacity(
+                      opacity: 0.35,
+                      child: _label(label, active),
+                    ),
+                    child: InkWell(
+                      onTap: () => pane.setSortKey(columnKey),
+                      child: _label(label, active),
+                    ),
+                  ),
+                ),
+              ),
+              if (onResize != null)
+                Positioned(
+                  right: -3,
+                  top: 0,
+                  bottom: 0,
+                  width: 6,
+                  child: _ColumnResizeHandle(onDrag: onResize!),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _label(String label, bool active) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: Row(
+        children: [
+          Flexible(
+            child: Text(
+              label,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: PanoramaColors.muted,
+              ),
+            ),
+          ),
+          if (active)
+            Icon(
+              pane.sortAscending ? Icons.arrow_upward : Icons.arrow_downward,
+              size: 12,
+              color: PanoramaColors.muted,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ColumnResizeHandle extends StatelessWidget {
+  const _ColumnResizeHandle({required this.onDrag});
+
+  final void Function(double delta) onDrag;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.resizeColumn,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onHorizontalDragUpdate: (details) => onDrag(details.delta.dx),
+        child: const SizedBox(width: 6, height: double.infinity),
+      ),
     );
   }
 }
@@ -564,63 +812,87 @@ class _FileRowState extends State<_FileRow> {
           onSecondaryTapUp: (details) => widget.onSecondaryTap(details.globalPosition),
           child: SizedBox(
             height: 32,
-            child: Row(
-              children: [
-                Expanded(
-                  flex: 4,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    child: Row(
-                      children: [
-                        widget.leading,
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: widget.renaming
-                              ? _RenameField(
-                                  initial: widget.entry.name,
-                                  onSubmit: widget.onRenameSubmit,
-                                  onCancel: widget.onRenameCancel,
-                                )
-                              : Text(
-                                  widget.entry.name,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(fontSize: 13),
-                                ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Expanded(
-                  flex: 3,
-                  child: Text(
-                    formatModified(widget.entry.modified),
-                    style: const TextStyle(fontSize: 12, color: PanoramaColors.muted),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: Text(
-                    widget.entry.fileType,
-                    style: const TextStyle(fontSize: 12, color: PanoramaColors.muted),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Expanded(
-                  flex: 1,
-                  child: Text(
-                    formatSize(widget.entry.size, widget.entry.isDirectory),
-                    style: const TextStyle(fontSize: 12, color: PanoramaColors.muted),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final order = widget.pane.columnOrder;
+                final widths = _resolvedColumnWidths(widget.pane);
+                final used =
+                    widths.values.fold<double>(0, (sum, w) => sum + w);
+                if (order.isNotEmpty && constraints.maxWidth > used) {
+                  final last = order.last;
+                  widths[last] =
+                      widths[last]! + (constraints.maxWidth - used);
+                }
+                return Row(
+                  children: [
+                    for (final key in order)
+                      SizedBox(
+                        width: widths[key],
+                        child: _cellFor(key),
+                      ),
+                  ],
+                );
+              },
             ),
           ),
         ),
       ),
     );
+  }
+
+  Widget _cellFor(SortKey key) {
+    switch (key) {
+      case SortKey.name:
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Row(
+            children: [
+              widget.leading,
+              const SizedBox(width: 8),
+              Expanded(
+                child: widget.renaming
+                    ? _RenameField(
+                        initial: widget.entry.name,
+                        onSubmit: widget.onRenameSubmit,
+                        onCancel: widget.onRenameCancel,
+                      )
+                    : Text(
+                        widget.entry.name,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 13),
+                      ),
+              ),
+            ],
+          ),
+        );
+      case SortKey.modified:
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Text(
+            formatModified(widget.entry.modified),
+            style: const TextStyle(fontSize: 12, color: PanoramaColors.muted),
+            overflow: TextOverflow.ellipsis,
+          ),
+        );
+      case SortKey.type:
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Text(
+            widget.entry.fileType,
+            style: const TextStyle(fontSize: 12, color: PanoramaColors.muted),
+            overflow: TextOverflow.ellipsis,
+          ),
+        );
+      case SortKey.size:
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Text(
+            formatSize(widget.entry.size, widget.entry.isDirectory),
+            style: const TextStyle(fontSize: 12, color: PanoramaColors.muted),
+            overflow: TextOverflow.ellipsis,
+          ),
+        );
+    }
   }
 }
 

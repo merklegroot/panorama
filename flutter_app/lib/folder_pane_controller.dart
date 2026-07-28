@@ -70,8 +70,38 @@ class FolderPaneController extends ChangeNotifier {
   String search = '';
   SortKey sortKey = SortKey.name;
   bool sortAscending = true;
+  List<SortKey> columnOrder = const [
+    SortKey.name,
+    SortKey.modified,
+    SortKey.type,
+    SortKey.size,
+  ];
   Map<SortKey, double> columnWidths = {};
   bool loading = true;
+
+  static const Map<SortKey, double> defaultColumnWidths = {
+    SortKey.name: 280,
+    SortKey.modified: 160,
+    SortKey.type: 110,
+    SortKey.size: 80,
+  };
+
+  static const Map<SortKey, double> minColumnWidths = {
+    SortKey.name: 120,
+    SortKey.modified: 100,
+    SortKey.type: 72,
+    SortKey.size: 56,
+  };
+
+  static const Map<SortKey, String> columnLabels = {
+    SortKey.name: 'Name',
+    SortKey.modified: 'Date modified',
+    SortKey.type: 'Type',
+    SortKey.size: 'Size',
+  };
+
+  double widthForColumn(SortKey key) =>
+      columnWidths[key] ?? defaultColumnWidths[key]!;
   String error = '';
   int _refreshToken = 0;
   bool _showHidden = false;
@@ -263,7 +293,35 @@ class FolderPaneController extends ChangeNotifier {
   }
 
   void setColumnWidth(SortKey key, double width) {
-    columnWidths = {...columnWidths, key: width};
+    final min = minColumnWidths[key] ?? 56;
+    columnWidths = {...columnWidths, key: width.clamp(min, 800)};
+    notifyListeners();
+  }
+
+  /// Drag a shared edge: grow [left] and shrink [right] by the same delta.
+  void resizeColumnEdge(SortKey left, SortKey right, double delta) {
+    final leftMin = minColumnWidths[left] ?? 56;
+    final rightMin = minColumnWidths[right] ?? 56;
+    final leftW = widthForColumn(left);
+    final rightW = widthForColumn(right);
+    final applied = delta.clamp(leftMin - leftW, rightW - rightMin);
+    if (applied == 0) return;
+    columnWidths = {
+      ...columnWidths,
+      left: leftW + applied,
+      right: rightW - applied,
+    };
+    notifyListeners();
+  }
+
+  void reorderColumn(int oldIndex, int newIndex) {
+    if (oldIndex == newIndex) return;
+    final next = [...columnOrder];
+    final key = next.removeAt(oldIndex);
+    // Adjust for removal when moving forward, matching ReorderableListView.
+    final insertAt = newIndex > oldIndex ? newIndex - 1 : newIndex;
+    next.insert(insertAt.clamp(0, next.length), key);
+    columnOrder = next;
     notifyListeners();
   }
 
