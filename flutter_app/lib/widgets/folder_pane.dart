@@ -672,10 +672,10 @@ class _HeaderCell extends StatelessWidget {
               ),
               if (onResize != null)
                 Positioned(
-                  right: -3,
+                  right: -4,
                   top: 0,
                   bottom: 0,
-                  width: 6,
+                  width: 8,
                   child: _ColumnResizeHandle(onDrag: onResize!),
                 ),
             ],
@@ -713,19 +713,50 @@ class _HeaderCell extends StatelessWidget {
   }
 }
 
-class _ColumnResizeHandle extends StatelessWidget {
+class _ColumnResizeHandle extends StatefulWidget {
   const _ColumnResizeHandle({required this.onDrag});
 
   final void Function(double delta) onDrag;
 
   @override
+  State<_ColumnResizeHandle> createState() => _ColumnResizeHandleState();
+}
+
+class _ColumnResizeHandleState extends State<_ColumnResizeHandle> {
+  bool _hover = false;
+  bool _dragging = false;
+
+  @override
   Widget build(BuildContext context) {
+    final active = _hover || _dragging;
     return MouseRegion(
       cursor: SystemMouseCursors.resizeColumn,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onHorizontalDragUpdate: (details) => onDrag(details.delta.dx),
-        child: const SizedBox(width: 6, height: double.infinity),
+        onHorizontalDragStart: (_) => setState(() => _dragging = true),
+        onHorizontalDragUpdate: (details) => widget.onDrag(details.delta.dx),
+        onHorizontalDragEnd: (_) => setState(() => _dragging = false),
+        onHorizontalDragCancel: () => setState(() => _dragging = false),
+        child: SizedBox(
+          width: 8,
+          height: double.infinity,
+          child: Center(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 80),
+              width: active ? 2 : 1,
+              height: double.infinity,
+              margin: const EdgeInsets.symmetric(vertical: 5),
+              decoration: BoxDecoration(
+                color: active
+                    ? PanoramaColors.blue
+                    : const Color(0x4D19263A),
+                borderRadius: BorderRadius.circular(1),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
