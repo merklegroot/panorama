@@ -11,6 +11,7 @@ class Sidebar extends StatelessWidget {
   IconData _iconFor(String key) {
     return switch (key) {
       'home' => Icons.home_outlined,
+      'apps' => Icons.apps_outlined,
       'monitor' => Icons.desktop_windows_outlined,
       'file' => Icons.description_outlined,
       'download' => Icons.download_outlined,

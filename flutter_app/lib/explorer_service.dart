@@ -24,6 +24,7 @@ class ExplorerService {
             : p.join(home, '.local', 'share', 'Trash', 'files');
     final candidates = <(String, String, String)>[
       ('Home', home, 'home'),
+      if (Platform.isMacOS) ('Applications', '/Applications', 'apps'),
       ('Desktop', p.join(home, 'Desktop'), 'monitor'),
       ('Documents', p.join(home, 'Documents'), 'file'),
       ('Downloads', p.join(home, 'Downloads'), 'download'),
