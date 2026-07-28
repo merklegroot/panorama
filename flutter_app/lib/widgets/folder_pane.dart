@@ -103,7 +103,7 @@ class _FolderPaneViewState extends State<FolderPaneView> {
   }
 
   Widget _leadingIcon(FileEntry entry, {required bool grid}) {
-    final size = grid ? 48.0 : 20.0;
+    final size = grid ? app.iconSize.iconPixels : 20.0;
     if (grid && !entry.isDirectory && imageExtensions.contains(entry.extension)) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(4),
@@ -427,9 +427,13 @@ class _FolderPaneViewState extends State<FolderPaneView> {
 
   Widget _buildGrid() {
     final entries = pane.visibleEntries;
+    final iconSize = app.iconSize;
     return MarqueeSelectArea(
       entries: entries,
-      layout: const GridMarqueeLayout(),
+      layout: GridMarqueeLayout(
+        maxCrossAxisExtent: iconSize.cellExtent,
+        childAspectRatio: iconSize.aspectRatio,
+      ),
       onMarqueeStarted: _onMarqueeStarted,
       onMarqueeSelection: _onMarqueeSelection,
       child: (scrollController, marqueeActive) {
@@ -437,19 +441,20 @@ class _FolderPaneViewState extends State<FolderPaneView> {
           controller: scrollController,
           physics: marqueeActive ? const NeverScrollableScrollPhysics() : null,
           padding: const EdgeInsets.all(12),
-          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 120,
+          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: iconSize.cellExtent,
             mainAxisSpacing: 8,
             crossAxisSpacing: 8,
-            childAspectRatio: 0.85,
+            childAspectRatio: iconSize.aspectRatio,
           ),
           itemCount: entries.length,
           itemBuilder: (context, index) {
             final entry = entries[index];
             return _GridTile(
-              key: ValueKey(entry.path),
+              key: ValueKey('${entry.path}:${iconSize.name}'),
               entry: entry,
               pane: pane,
+              nameFontSize: iconSize.nameFontSize,
               leading: _leadingIcon(entry, grid: true),
               onSelect: () {
                 app.setActivePane(widget.paneId);
@@ -625,6 +630,7 @@ class _GridTile extends StatefulWidget {
     required this.entry,
     required this.pane,
     required this.leading,
+    required this.nameFontSize,
     required this.onSelect,
     required this.onOpen,
     required this.onSecondaryTap,
@@ -633,6 +639,7 @@ class _GridTile extends StatefulWidget {
   final FileEntry entry;
   final FolderPaneController pane;
   final Widget leading;
+  final double nameFontSize;
   final VoidCallback onSelect;
   final VoidCallback onOpen;
   final void Function(Offset) onSecondaryTap;
@@ -702,7 +709,7 @@ class _GridTileState extends State<_GridTile> {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 12),
+                  style: TextStyle(fontSize: widget.nameFontSize),
                 ),
               ],
             ),

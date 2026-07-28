@@ -9,6 +9,52 @@ enum SortKey { name, modified, type, size }
 
 enum ViewMode { list, grid }
 
+/// Icon sizes for grid view, matching Windows Explorer's common options.
+enum IconSize {
+  small(
+    label: 'Small icons',
+    iconPixels: 32,
+    cellExtent: 88,
+    aspectRatio: 0.78,
+    nameFontSize: 11,
+  ),
+  medium(
+    label: 'Medium icons',
+    iconPixels: 48,
+    cellExtent: 120,
+    aspectRatio: 0.85,
+    nameFontSize: 12,
+  ),
+  large(
+    label: 'Large icons',
+    iconPixels: 80,
+    cellExtent: 168,
+    aspectRatio: 0.88,
+    nameFontSize: 12,
+  ),
+  extraLarge(
+    label: 'Extra large icons',
+    iconPixels: 128,
+    cellExtent: 236,
+    aspectRatio: 0.9,
+    nameFontSize: 13,
+  );
+
+  const IconSize({
+    required this.label,
+    required this.iconPixels,
+    required this.cellExtent,
+    required this.aspectRatio,
+    required this.nameFontSize,
+  });
+
+  final String label;
+  final double iconPixels;
+  final double cellExtent;
+  final double aspectRatio;
+  final double nameFontSize;
+}
+
 enum PaneId { left, right }
 
 class FolderPaneController extends ChangeNotifier {

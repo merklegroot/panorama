@@ -165,12 +165,7 @@ class CommandBar extends StatelessWidget {
                   toggled: controller.view == ViewMode.list,
                   onPressed: () => controller.setView(ViewMode.list),
                 ),
-                _Tb(
-                  icon: Icons.grid_view,
-                  tip: 'Icon view',
-                  toggled: controller.view == ViewMode.grid,
-                  onPressed: () => controller.setView(ViewMode.grid),
-                ),
+                _IconSizeMenu(controller: controller),
               ],
             ),
           ),
@@ -503,6 +498,49 @@ class _VSep extends StatelessWidget {
       height: 20,
       margin: const EdgeInsets.symmetric(horizontal: 4),
       color: PanoramaColors.line,
+    );
+  }
+}
+
+class _IconSizeMenu extends StatelessWidget {
+  const _IconSizeMenu({required this.controller});
+
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final inIcons = controller.view == ViewMode.grid;
+    return MenuAnchor(
+      builder: (context, menu, child) {
+        return Tooltip(
+          message: inIcons ? 'Icon size' : 'Icon view',
+          child: IconButton(
+            onPressed: () {
+              if (menu.isOpen) {
+                menu.close();
+              } else {
+                menu.open();
+              }
+            },
+            visualDensity: VisualDensity.compact,
+            style: IconButton.styleFrom(
+              backgroundColor: inIcons ? PanoramaColors.blueSoft : null,
+              foregroundColor: inIcons ? PanoramaColors.blue : null,
+            ),
+            icon: const Icon(Icons.grid_view, size: 18),
+          ),
+        );
+      },
+      menuChildren: [
+        for (final size in IconSize.values)
+          MenuItemButton(
+            onPressed: () => controller.setIconSize(size),
+            trailingIcon: inIcons && controller.iconSize == size
+                ? const Icon(Icons.check, size: 16)
+                : const SizedBox(width: 16),
+            child: Text(size.label),
+          ),
+      ],
     );
   }
 }

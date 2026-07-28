@@ -548,11 +548,55 @@ class ExplorerContextMenu extends StatelessWidget {
           controller.hideContextMenu();
         }),
         const Divider(height: 1),
+        _viewItem(
+          Icons.view_list,
+          'Details',
+          selected: controller.view == ViewMode.list,
+          onTap: () {
+            controller.setView(ViewMode.list);
+            controller.hideContextMenu();
+          },
+        ),
+        for (final size in IconSize.values)
+          _viewItem(
+            Icons.grid_view,
+            size.label,
+            selected: controller.view == ViewMode.grid &&
+                controller.iconSize == size,
+            onTap: () {
+              controller.setIconSize(size);
+              controller.hideContextMenu();
+            },
+          ),
+        const Divider(height: 1),
         _item(Icons.refresh, 'Refresh', () {
           controller.refreshActive();
           controller.hideContextMenu();
         }),
       ],
+    );
+  }
+
+  Widget _viewItem(
+    IconData icon,
+    String label, {
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        child: Row(
+          children: [
+            Icon(icon, size: 16),
+            const SizedBox(width: 10),
+            Expanded(child: Text(label)),
+            if (selected)
+              const Icon(Icons.check, size: 16, color: PanoramaColors.blue),
+          ],
+        ),
+      ),
     );
   }
 

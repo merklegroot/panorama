@@ -22,6 +22,7 @@ class AppController extends ChangeNotifier {
   double previewWidth = 280;
   PaneId activePaneId = PaneId.left;
   ViewMode view = ViewMode.list;
+  IconSize iconSize = IconSize.medium;
   double sidebarWidth = 180;
   bool showHidden = false;
   String? renaming;
@@ -154,6 +155,12 @@ class AppController extends ChangeNotifier {
 
   void setView(ViewMode mode) {
     view = mode;
+    notifyListeners();
+  }
+
+  void setIconSize(IconSize size) {
+    iconSize = size;
+    view = ViewMode.grid;
     notifyListeners();
   }
 
