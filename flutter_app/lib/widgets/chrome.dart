@@ -370,7 +370,12 @@ class StatusBar extends StatelessWidget {
               child: Text(
                 controller.statusFlash,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 11, color: PanoramaColors.danger),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: controller.statusFlashError
+                      ? PanoramaColors.danger
+                      : PanoramaColors.blue,
+                ),
               ),
             ),
             if (controller.statusFlash.contains('Full Disk Access')) ...[

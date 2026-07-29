@@ -405,6 +405,10 @@ class ExplorerContextMenu extends StatelessWidget {
             );
           }, danger: true),
           const Divider(height: 1),
+          _item(Icons.link, 'Copy Path', () {
+            controller.copyFullPath(entry.path);
+            controller.hideContextMenu();
+          }),
           _item(Icons.open_in_new, controller.api.nativeTrashLabel, () {
             controller.hideContextMenu();
             controller.openNativeTrash();
@@ -435,6 +439,10 @@ class ExplorerContextMenu extends StatelessWidget {
         ],
         _item(Icons.copy, 'Copy', () {
           controller.copySelected(false);
+          controller.hideContextMenu();
+        }),
+        _item(Icons.link, 'Copy Path', () {
+          controller.copyFullPath(entry.path);
           controller.hideContextMenu();
         }),
         _item(Icons.content_cut, 'Cut', () {

@@ -59,6 +59,7 @@ class AppController extends ChangeNotifier {
   int terminalSession = 0;
   int terminalCwdSync = 0;
   String statusFlash = '';
+  bool statusFlashError = false;
   int _statusFlashToken = 0;
 
   FolderPaneController get activePane =>
@@ -436,13 +437,15 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void flashStatus(String message) {
+  void flashStatus(String message, {bool error = false, Duration? duration}) {
     statusFlash = message;
+    statusFlashError = error;
     final token = ++_statusFlashToken;
     notifyListeners();
-    Future<void>.delayed(const Duration(seconds: 5), () {
+    Future<void>.delayed(duration ?? Duration(seconds: error ? 5 : 2), () {
       if (_statusFlashToken != token) return;
       statusFlash = '';
+      statusFlashError = false;
       notifyListeners();
     });
   }
@@ -452,7 +455,7 @@ class AppController extends ChangeNotifier {
     if (stack != null) {
       debugPrint('$stack');
     }
-    flashStatus(error.toString());
+    flashStatus(error.toString(), error: true);
   }
 
   Future<void> removeSelected() async {
@@ -523,6 +526,11 @@ class AppController extends ChangeNotifier {
   Future<void> copySelected(bool cut) async {
     if (activePane.selected.isEmpty) return;
     await api.setClipboard(activePane.selected.toList(), cut);
+  }
+
+  Future<void> copyFullPath(String path) async {
+    await Clipboard.setData(ClipboardData(text: path));
+    flashStatus('Path copied');
   }
 
   Future<void> paste() async {
