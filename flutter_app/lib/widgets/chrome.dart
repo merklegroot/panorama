@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../app_controller.dart';
 import '../explorer_service.dart';
 import '../folder_pane_controller.dart';
+import '../settings.dart';
 import '../theme.dart';
 import 'address_path_field.dart';
 import 'trash_dialogs.dart';
@@ -116,6 +117,12 @@ class CommandBar extends StatelessWidget {
           ),
           const Spacer(),
           _Tb(
+            icon: Icons.settings_outlined,
+            tip: 'Settings',
+            toggled: controller.settingsOpen,
+            onPressed: controller.toggleSettings,
+          ),
+          _Tb(
             icon: Icons.memory_outlined,
             tip: 'System info',
             toggled: controller.machineInfoOpen,
@@ -139,18 +146,24 @@ class CommandBar extends StatelessWidget {
             toggled: controller.showHidden,
             onPressed: controller.toggleShowHidden,
           ),
-          _Tb(
-            icon: Icons.view_column_outlined,
-            tip: controller.dualPane ? 'Single pane' : 'Two panes',
-            toggled: controller.dualPane,
-            onPressed: controller.toggleDualPane,
-          ),
-          _Tb(
-            icon: Icons.preview_outlined,
-            tip: controller.previewOpen ? 'Hide preview' : 'Show preview',
-            toggled: controller.previewOpen,
-            onPressed: controller.togglePreview,
-          ),
+          if (controller.isExperimentalEnabled(
+            ExperimentalFeature.dualPane,
+          ))
+            _Tb(
+              icon: Icons.view_column_outlined,
+              tip: controller.dualPane ? 'Single pane' : 'Two panes',
+              toggled: controller.dualPane,
+              onPressed: controller.toggleDualPane,
+            ),
+          if (controller.isExperimentalEnabled(
+            ExperimentalFeature.previewPane,
+          ))
+            _Tb(
+              icon: Icons.preview_outlined,
+              tip: controller.previewOpen ? 'Hide preview' : 'Show preview',
+              toggled: controller.previewOpen,
+              onPressed: controller.togglePreview,
+            ),
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 4),
             decoration: BoxDecoration(
@@ -213,7 +226,7 @@ class _TitleBarState extends State<TitleBar> {
   @override
   void didUpdateWidget(covariant TitleBar oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (app.editAddressRequest != _lastEditRequest && !app.dualPane) {
+    if (app.editAddressRequest != _lastEditRequest && !app.dualPaneVisible) {
       _lastEditRequest = app.editAddressRequest;
       setState(() {
         _address.text = app.activePane.path;
@@ -234,7 +247,7 @@ class _TitleBarState extends State<TitleBar> {
 
   @override
   Widget build(BuildContext context) {
-    if (app.dualPane) {
+    if (app.dualPaneVisible) {
       return const SizedBox(height: 38);
     }
 
@@ -339,27 +352,31 @@ class StatusBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          _Tb(
-            icon: Icons.terminal,
-            tip: !controller.terminalOpen
-                ? 'Terminal'
-                : controller.terminalCollapsed
-                    ? 'Show terminal'
-                    : 'Hide terminal',
-            toggled: controller.terminalOpen,
-            onPressed: () {
-              if (!controller.terminalOpen) {
-                controller.toggleTerminalPanel();
-              } else {
-                controller.setTerminalCollapsed(!controller.terminalCollapsed);
-              }
-            },
-          ),
-          if (controller.terminalOpen && controller.terminalCollapsed) ...[
+          if (controller.isExperimentalEnabled(
+            ExperimentalFeature.embeddedTerminal,
+          )) ...[
+            _Tb(
+              icon: Icons.terminal,
+              tip: !controller.terminalOpen
+                  ? 'Terminal'
+                  : controller.terminalCollapsed
+                      ? 'Show terminal'
+                      : 'Hide terminal',
+              toggled: controller.terminalOpen,
+              onPressed: () {
+                if (!controller.terminalOpen) {
+                  controller.toggleTerminalPanel();
+                } else {
+                  controller.setTerminalCollapsed(!controller.terminalCollapsed);
+                }
+              },
+            ),
+            if (controller.terminalOpen && controller.terminalCollapsed) ...[
+              const SizedBox(width: 4),
+              _TerminalRunningChip(controller: controller),
+            ],
             const SizedBox(width: 4),
-            _TerminalRunningChip(controller: controller),
           ],
-          const SizedBox(width: 4),
           Text(
             '${pane.visibleEntries.length} ${pane.visibleEntries.length == 1 ? 'item' : 'items'}',
             style: const TextStyle(fontSize: 11, color: PanoramaColors.muted),
@@ -409,7 +426,7 @@ class StatusBar extends StatelessWidget {
               );
             },
           ),
-          if (controller.dualPane) ...[
+          if (controller.dualPaneVisible) ...[
             const Text('  •  ', style: TextStyle(fontSize: 11, color: PanoramaColors.muted)),
             Text(
               '${controller.activePaneId == PaneId.left ? 'Left' : 'Right'} pane',

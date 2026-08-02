@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../app_controller.dart';
 import '../folder_pane_controller.dart';
 import '../models.dart';
+import '../settings.dart';
 import '../theme.dart';
 import 'trash_dialogs.dart';
 
@@ -425,7 +426,10 @@ class ExplorerContextMenu extends StatelessWidget {
           controller.openEntryIn(pane, entry);
           controller.hideContextMenu();
         }),
-        if (entry.isDirectory)
+        if (controller.isExperimentalEnabled(
+              ExperimentalFeature.embeddedTerminal,
+            ) &&
+            entry.isDirectory)
           _item(Icons.terminal, 'Open Terminal Here', () {
             controller.openTerminalHere();
           }),
@@ -548,12 +552,20 @@ class ExplorerContextMenu extends StatelessWidget {
           controller.createFolder();
           controller.hideContextMenu();
         }),
-        _item(Icons.terminal, 'Open Terminal Here', () {
-          controller.openTerminalHere();
-        }),
+        if (controller.isExperimentalEnabled(
+          ExperimentalFeature.embeddedTerminal,
+        ))
+          _item(Icons.terminal, 'Open Terminal Here', () {
+            controller.openTerminalHere();
+          }),
         _item(Icons.content_paste, 'Paste', () {
           controller.paste();
           controller.hideContextMenu();
+        }),
+        const Divider(height: 1),
+        _item(Icons.settings_outlined, 'Settings', () {
+          controller.hideContextMenu();
+          controller.openSettings();
         }),
         const Divider(height: 1),
         _viewItem(

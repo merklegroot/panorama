@@ -229,16 +229,44 @@ class _SinglePreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (_isImage) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
+              child: _ImagePreview(key: ValueKey(entry.path), path: entry.path),
+            ),
+          ),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 220),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(14, 16, 14, 24),
+              child: _metadata(),
+            ),
+          ),
+        ],
+      );
+    }
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
       children: [
-        if (_isImage)
-          _ImagePreview(key: ValueKey(entry.path), path: entry.path)
-        else if (_isText)
+        if (_isText)
           _TextPreview(key: ValueKey(entry.path), path: entry.path)
         else
           _IconHero(icon: _icon, isDirectory: entry.isDirectory),
         const SizedBox(height: 16),
+        _metadata(),
+      ],
+    );
+  }
+
+  Widget _metadata() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
         Text(
           entry.name,
           style: const TextStyle(
@@ -307,31 +335,169 @@ class _IconHero extends StatelessWidget {
   }
 }
 
-class _ImagePreview extends StatelessWidget {
+class _ImagePreview extends StatefulWidget {
   const _ImagePreview({super.key, required this.path});
 
   final String path;
 
   @override
+  State<_ImagePreview> createState() => _ImagePreviewState();
+}
+
+class _ImagePreviewState extends State<_ImagePreview> {
+  /// Ratios outside this range are treated as extreme: fit the short axis and
+  /// scroll along the long one so the whole image remains reachable.
+  static const _minAspect = 1 / 3;
+  static const _maxAspect = 3.0;
+
+  ImageStream? _stream;
+  ImageStreamListener? _listener;
+  int? _pixelWidth;
+  int? _pixelHeight;
+  Object? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolve();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ImagePreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.path != widget.path) {
+      _pixelWidth = null;
+      _pixelHeight = null;
+      _error = null;
+      _resolve();
+    }
+  }
+
+  @override
+  void dispose() {
+    _detach();
+    super.dispose();
+  }
+
+  void _detach() {
+    if (_stream != null && _listener != null) {
+      _stream!.removeListener(_listener!);
+    }
+    _stream = null;
+    _listener = null;
+  }
+
+  void _resolve() {
+    _detach();
+    final stream = FileImage(File(widget.path)).resolve(const ImageConfiguration());
+    late final ImageStreamListener listener;
+    listener = ImageStreamListener(
+      (info, _) {
+        if (!mounted) return;
+        setState(() {
+          _pixelWidth = info.image.width;
+          _pixelHeight = info.image.height;
+          _error = null;
+        });
+      },
+      onError: (error, stack) {
+        if (!mounted) return;
+        setState(() => _error = error);
+      },
+    );
+    _stream = stream;
+    _listener = listener;
+    stream.addListener(listener);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Container(
-      constraints: const BoxConstraints(maxHeight: 220),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.7),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: PanoramaColors.line),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Image.file(
-        File(path),
-        fit: BoxFit.contain,
-        width: double.infinity,
-        gaplessPlayback: true,
-        errorBuilder: (_, error, stackTrace) => const SizedBox(
-          height: 160,
-          child: Center(
-            child: Icon(Icons.broken_image_outlined, size: 48, color: PanoramaColors.muted),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxW = constraints.maxWidth;
+        final maxH = constraints.maxHeight.isFinite ? constraints.maxHeight : maxW;
+
+        return Container(
+          width: maxW,
+          height: maxH,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.7),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: PanoramaColors.line),
           ),
+          clipBehavior: Clip.antiAlias,
+          alignment: Alignment.center,
+          child: _body(maxW, maxH),
+        );
+      },
+    );
+  }
+
+  Widget _body(double maxW, double maxH) {
+    if (_error != null) {
+      return const Center(
+        child: Icon(
+          Icons.broken_image_outlined,
+          size: 48,
+          color: PanoramaColors.muted,
+        ),
+      );
+    }
+    if (_pixelWidth == null || _pixelHeight == null || _pixelHeight == 0) {
+      return const Center(
+        child: SizedBox(
+          width: 18,
+          height: 18,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+
+    final aspect = _pixelWidth! / _pixelHeight!;
+    final file = File(widget.path);
+
+    // Normal ratios: scale down to fit the pane, never crop.
+    if (aspect >= _minAspect && aspect <= _maxAspect) {
+      return Image.file(
+        file,
+        fit: BoxFit.contain,
+        width: maxW,
+        height: maxH,
+        gaplessPlayback: true,
+      );
+    }
+
+    // Extreme wide: fit height, scroll horizontally to see the rest.
+    if (aspect > _maxAspect) {
+      final height = maxH;
+      final width = height * aspect;
+      return Scrollbar(
+        thumbVisibility: true,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Image.file(
+            file,
+            height: height,
+            width: width,
+            fit: BoxFit.fill,
+            gaplessPlayback: true,
+          ),
+        ),
+      );
+    }
+
+    // Extreme tall: fit width, scroll vertically to see the rest.
+    final width = maxW;
+    final height = width / aspect;
+    return Scrollbar(
+      thumbVisibility: true,
+      child: SingleChildScrollView(
+        child: Image.file(
+          file,
+          width: width,
+          height: height,
+          fit: BoxFit.fill,
+          gaplessPlayback: true,
         ),
       ),
     );

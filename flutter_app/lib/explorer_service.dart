@@ -8,10 +8,12 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import 'models.dart';
+import 'settings.dart';
 
 class ExplorerService {
   ClipboardState _clipboard = const ClipboardState();
   String? _notesPath;
+  String? _settingsPath;
 
   Future<List<LocationItem>> getLocations() async {
     final home = Platform.environment['HOME'] ??
@@ -1577,6 +1579,64 @@ end run
     final repo = fromCwd ?? fromExe ?? Directory.current.parent;
     _notesPath = p.join(repo.path, 'notes', 'improvements.json');
     return _notesPath!;
+  }
+
+  String resolveSettingsPath() {
+    if (_settingsPath != null) return _settingsPath!;
+
+    final home = Platform.environment['HOME'] ??
+        Platform.environment['USERPROFILE'] ??
+        Directory.current.path;
+
+    if (Platform.isMacOS) {
+      _settingsPath = p.join(
+        home,
+        'Library',
+        'Application Support',
+        'Panorama',
+        'settings.json',
+      );
+    } else if (Platform.isWindows) {
+      final appData = Platform.environment['APPDATA'] ??
+          p.join(home, 'AppData', 'Roaming');
+      _settingsPath = p.join(appData, 'Panorama', 'settings.json');
+    } else {
+      final xdg = Platform.environment['XDG_CONFIG_HOME'];
+      _settingsPath = p.join(
+        xdg ?? p.join(home, '.config'),
+        'panorama',
+        'settings.json',
+      );
+    }
+    return _settingsPath!;
+  }
+
+  Future<AppSettings> loadSettings() async {
+    final file = File(resolveSettingsPath());
+    try {
+      final raw = await file.readAsString();
+      final parsed = jsonDecode(raw);
+      if (parsed is Map<String, dynamic>) {
+        return AppSettings.fromJson(parsed);
+      }
+      if (parsed is Map) {
+        return AppSettings.fromJson(Map<String, dynamic>.from(parsed));
+      }
+    } on PathNotFoundException {
+      // Defaults: all experimental features off.
+    } on FileSystemException {
+      // Defaults: all experimental features off.
+    } on FormatException {
+      // Defaults: all experimental features off.
+    }
+    return AppSettings.empty;
+  }
+
+  Future<void> saveSettings(AppSettings settings) async {
+    final target = resolveSettingsPath();
+    await Directory(p.dirname(target)).create(recursive: true);
+    final encoder = const JsonEncoder.withIndent('  ');
+    await File(target).writeAsString('${encoder.convert(settings.toJson())}\n');
   }
 
   Future<Map<String, dynamic>> _readNotesFile() async {

@@ -332,9 +332,13 @@ class _FolderPaneViewState extends State<FolderPaneView> {
 
   Widget _buildList() {
     final entries = pane.visibleEntries;
+    final customizable = app.customizableColumnsEnabled;
     return Column(
       children: [
-        _ColumnHeaderBar(pane: pane),
+        if (customizable)
+          _ColumnHeaderBar(pane: pane)
+        else
+          _SimpleColumnHeaderBar(pane: pane),
         Expanded(
           child: MarqueeSelectArea(
             entries: entries,
@@ -355,6 +359,7 @@ class _FolderPaneViewState extends State<FolderPaneView> {
                     key: ValueKey(entry.path),
                     entry: entry,
                     pane: pane,
+                    customizableColumns: customizable,
                     renaming: app.renaming == entry.path,
                     leading: _leadingIcon(entry, grid: false),
                     onSelect: () {
@@ -446,11 +451,71 @@ class _FolderPaneViewState extends State<FolderPaneView> {
   }
 }
 
-/// Pixel widths for list columns from the pane's stored sizes.
+/// Shared pixel widths for list columns from the pane's stored sizes.
 Map<SortKey, double> _resolvedColumnWidths(FolderPaneController pane) {
   return {
     for (final key in pane.columnOrder) key: pane.widthForColumn(key),
   };
+}
+
+class _SimpleColumnHeaderBar extends StatelessWidget {
+  const _SimpleColumnHeaderBar({required this.pane});
+
+  final FolderPaneController pane;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: pane,
+      builder: (context, _) {
+        return Container(
+          height: 28,
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: PanoramaColors.line)),
+          ),
+          child: Row(
+            children: [
+              _simpleHeader('Name', SortKey.name, flex: 4),
+              _simpleHeader('Date modified', SortKey.modified, flex: 3),
+              _simpleHeader('Type', SortKey.type, flex: 2),
+              _simpleHeader('Size', SortKey.size, flex: 1),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _simpleHeader(String label, SortKey key, {required int flex}) {
+    final active = pane.sortKey == key;
+    return Expanded(
+      flex: flex,
+      child: InkWell(
+        onTap: () => pane.setSortKey(key),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Row(
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: PanoramaColors.muted,
+                ),
+              ),
+              if (active)
+                Icon(
+                  pane.sortAscending ? Icons.arrow_upward : Icons.arrow_downward,
+                  size: 12,
+                  color: PanoramaColors.muted,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _ColumnHeaderBar extends StatefulWidget {
@@ -767,6 +832,7 @@ class _FileRow extends StatefulWidget {
     super.key,
     required this.entry,
     required this.pane,
+    required this.customizableColumns,
     required this.renaming,
     required this.leading,
     required this.onSelect,
@@ -778,6 +844,7 @@ class _FileRow extends StatefulWidget {
 
   final FileEntry entry;
   final FolderPaneController pane;
+  final bool customizableColumns;
   final bool renaming;
   final Widget leading;
   final VoidCallback onSelect;
@@ -843,28 +910,37 @@ class _FileRowState extends State<_FileRow> {
           onSecondaryTapUp: (details) => widget.onSecondaryTap(details.globalPosition),
           child: SizedBox(
             height: 32,
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final order = widget.pane.columnOrder;
-                final widths = _resolvedColumnWidths(widget.pane);
-                final used =
-                    widths.values.fold<double>(0, (sum, w) => sum + w);
-                if (order.isNotEmpty && constraints.maxWidth > used) {
-                  final last = order.last;
-                  widths[last] =
-                      widths[last]! + (constraints.maxWidth - used);
-                }
-                return Row(
-                  children: [
-                    for (final key in order)
-                      SizedBox(
-                        width: widths[key],
-                        child: _cellFor(key),
-                      ),
-                  ],
-                );
-              },
-            ),
+            child: widget.customizableColumns
+                ? LayoutBuilder(
+                    builder: (context, constraints) {
+                      final order = widget.pane.columnOrder;
+                      final widths = _resolvedColumnWidths(widget.pane);
+                      final used =
+                          widths.values.fold<double>(0, (sum, w) => sum + w);
+                      if (order.isNotEmpty && constraints.maxWidth > used) {
+                        final last = order.last;
+                        widths[last] =
+                            widths[last]! + (constraints.maxWidth - used);
+                      }
+                      return Row(
+                        children: [
+                          for (final key in order)
+                            SizedBox(
+                              width: widths[key],
+                              child: _cellFor(key),
+                            ),
+                        ],
+                      );
+                    },
+                  )
+                : Row(
+                    children: [
+                      Expanded(flex: 4, child: _cellFor(SortKey.name)),
+                      Expanded(flex: 3, child: _cellFor(SortKey.modified)),
+                      Expanded(flex: 2, child: _cellFor(SortKey.type)),
+                      Expanded(flex: 1, child: _cellFor(SortKey.size)),
+                    ],
+                  ),
           ),
         ),
       ),

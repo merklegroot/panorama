@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'explorer_service.dart';
 import 'folder_pane_controller.dart';
 import 'models.dart';
+import 'settings.dart';
 
 class AppController extends ChangeNotifier {
   AppController(this.api)
@@ -16,9 +17,10 @@ class AppController extends ChangeNotifier {
   final FolderPaneController left;
   final FolderPaneController right;
 
+  AppSettings settings = AppSettings.empty;
   List<LocationItem> locations = [];
   bool dualPane = false;
-  bool previewOpen = true;
+  bool previewOpen = false;
   double previewWidth = 280;
   PaneId activePaneId = PaneId.left;
   ViewMode view = ViewMode.list;
@@ -27,6 +29,7 @@ class AppController extends ChangeNotifier {
   bool showHidden = false;
   String? renaming;
   bool notesOpen = false;
+  bool settingsOpen = false;
   List<ImprovementNote> notes = [];
   String noteDraft = '';
   String notesError = '';
@@ -78,10 +81,27 @@ class AppController extends ChangeNotifier {
   List<ImprovementNote> get doneNotes =>
       notes.where((n) => n.status == NoteStatus.done).toList();
 
+  bool isExperimentalEnabled(ExperimentalFeature feature) =>
+      settings.isEnabled(feature);
+
+  bool get previewVisible =>
+      isExperimentalEnabled(ExperimentalFeature.previewPane) && previewOpen;
+
+  bool get dualPaneVisible =>
+      isExperimentalEnabled(ExperimentalFeature.dualPane) && dualPane;
+
+  bool get terminalVisible =>
+      isExperimentalEnabled(ExperimentalFeature.embeddedTerminal) &&
+      terminalOpen;
+
+  bool get customizableColumnsEnabled =>
+      isExperimentalEnabled(ExperimentalFeature.customizableColumns);
+
   Future<void> init() async {
     left.addListener(_onPaneChanged);
     right.addListener(_onPaneChanged);
     try {
+      settings = await api.loadSettings();
       locations = await api.getLocations();
       final initial =
           locations
@@ -173,6 +193,7 @@ class AppController extends ChangeNotifier {
   }
 
   void toggleDualPane() {
+    if (!isExperimentalEnabled(ExperimentalFeature.dualPane)) return;
     if (!dualPane) {
       // Seed the right pane from the left only the first time dual pane is
       // enabled this session; later toggles keep the right pane's path.
@@ -190,6 +211,7 @@ class AppController extends ChangeNotifier {
   }
 
   void togglePreview() {
+    if (!isExperimentalEnabled(ExperimentalFeature.previewPane)) return;
     previewOpen = !previewOpen;
     notifyListeners();
   }
@@ -208,6 +230,7 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> openTerminalHere() async {
+    if (!isExperimentalEnabled(ExperimentalFeature.embeddedTerminal)) return;
     final pane = contextMenuPane;
     final entry = contextMenuEntry;
     hideContextMenu();
@@ -220,6 +243,7 @@ class AppController extends ChangeNotifier {
   }
 
   void openTerminalPanel({String? directory, bool restart = false}) {
+    if (!isExperimentalEnabled(ExperimentalFeature.embeddedTerminal)) return;
     final dir = (directory == null || directory.isEmpty)
         ? left.path
         : directory;
@@ -277,6 +301,7 @@ class AppController extends ChangeNotifier {
 
   Future<void> openMachineInfo() async {
     closeNotesPanel();
+    closeSettings();
     machineInfoOpen = true;
     machineInfoPage = MachineInfoPage.overview;
     machineInfoLoading = true;
@@ -568,6 +593,7 @@ class AppController extends ChangeNotifier {
 
   void openNotesPanel() {
     closeMachineInfo();
+    closeSettings();
     doneNotesExpanded = false;
     notesOpen = true;
     notifyListeners();
@@ -579,6 +605,57 @@ class AppController extends ChangeNotifier {
     editingNoteId = null;
     editingNoteBody = '';
     notifyListeners();
+  }
+
+  void openSettings() {
+    closeMachineInfo();
+    closeNotesPanel();
+    hideContextMenu();
+    settingsOpen = true;
+    notifyListeners();
+  }
+
+  void closeSettings() {
+    if (!settingsOpen) return;
+    settingsOpen = false;
+    notifyListeners();
+  }
+
+  void toggleSettings() {
+    if (settingsOpen) {
+      closeSettings();
+    } else {
+      openSettings();
+    }
+  }
+
+  Future<void> setExperimentalFeature(
+    ExperimentalFeature feature,
+    bool enabled,
+  ) async {
+    settings = settings.withExperimental(feature, enabled);
+    if (!enabled) {
+      switch (feature) {
+        case ExperimentalFeature.previewPane:
+          previewOpen = false;
+        case ExperimentalFeature.dualPane:
+          if (dualPane) {
+            dualPane = false;
+            activePaneId = PaneId.left;
+          }
+        case ExperimentalFeature.embeddedTerminal:
+          terminalOpen = false;
+          terminalCollapsed = false;
+        case ExperimentalFeature.customizableColumns:
+          break;
+      }
+    }
+    notifyListeners();
+    try {
+      await api.saveSettings(settings);
+    } catch (reason) {
+      flashError(reason);
+    }
   }
 
   void setNoteDraft(String value) {
@@ -745,6 +822,10 @@ class AppController extends ChangeNotifier {
         hideContextMenu();
         return KeyEventResult.handled;
       }
+      if (settingsOpen) {
+        closeSettings();
+        return KeyEventResult.handled;
+      }
       if (machineInfoOpen) {
         if (machineInfoPage != MachineInfoPage.overview) {
           showMachineInfoOverview();
@@ -763,7 +844,7 @@ class AppController extends ChangeNotifier {
       }
     }
 
-    if (event.logicalKey == LogicalKeyboardKey.tab && dualPane) {
+    if (event.logicalKey == LogicalKeyboardKey.tab && dualPaneVisible) {
       setActivePane(activePaneId == PaneId.left ? PaneId.right : PaneId.left);
       return KeyEventResult.handled;
     }

@@ -8,6 +8,7 @@ import 'folder_pane.dart';
 import 'machine_info_panel.dart';
 import 'notes_and_menu.dart';
 import 'preview_pane.dart';
+import 'settings_panel.dart';
 import 'sidebar.dart';
 import 'terminal_panel.dart';
 
@@ -32,7 +33,9 @@ class AppShell extends StatelessWidget {
                   focusContext.findAncestorWidgetOfExactType<EditableText>();
               if (editable != null) {
                 if (event.logicalKey == LogicalKeyboardKey.escape &&
-                    (controller.notesOpen || controller.machineInfoOpen)) {
+                    (controller.notesOpen ||
+                        controller.machineInfoOpen ||
+                        controller.settingsOpen)) {
                   return controller.handleKeyEvent(event);
                 }
                 return KeyEventResult.ignored;
@@ -66,10 +69,10 @@ class AppShell extends StatelessWidget {
                                   padding: EdgeInsets.fromLTRB(
                                     8,
                                     0,
-                                    controller.previewOpen ? 0 : 8,
+                                    controller.previewVisible ? 0 : 8,
                                     0,
                                   ),
-                                  child: controller.dualPane
+                                  child: controller.dualPaneVisible
                                       ? Row(
                                           children: [
                                             Expanded(
@@ -99,14 +102,14 @@ class AppShell extends StatelessWidget {
                                         ),
                                 ),
                               ),
-                              if (controller.previewOpen) ...[
+                              if (controller.previewVisible) ...[
                                 PreviewResizeHandle(controller: controller),
                                 PreviewPane(controller: controller),
                               ],
                             ],
                           ),
                         ),
-                        if (controller.terminalOpen)
+                        if (controller.terminalVisible)
                           TerminalPanel(controller: controller),
                         ListenableBuilder(
                           listenable: Listenable.merge([
@@ -122,6 +125,7 @@ class AppShell extends StatelessWidget {
               ),
               if (controller.notesOpen) NotesPanel(controller: controller),
               if (controller.machineInfoOpen) MachineInfoPanel(controller: controller),
+              if (controller.settingsOpen) SettingsPanel(controller: controller),
               ExplorerContextMenu(controller: controller),
             ],
           ),
